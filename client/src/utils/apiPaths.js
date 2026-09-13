@@ -18,6 +18,8 @@ export const API_PATHS = {
     TASKS: {
         GET_DASHBOARD_DATA: "/api/tasks/dashboard-data", // Get Dashboard Data
         GET_USER_DASHBOARD_DATA: "/api/tasks/user-dashboard-data", // Get User Dashboard Data
+        GET_ANALYTICS: "/api/tasks/analytics", // Progress + completion analytics
+        GET_CATEGORIES: "/api/tasks/categories", // Distinct categories in scope
         GET_ALL_TASKS: "/api/tasks", // Get all tasks (Admin: all, User: only assigned)
         GET_TASK_BY_ID: (taskId) => `/api/tasks/${taskId}`, // Get task by ID
         CREATE_TASK: "/api/tasks", // Create a new task (Admin only)
@@ -25,6 +27,16 @@ export const API_PATHS = {
         DELETE_TASK: (taskId) => `/api/tasks/${taskId}`, // Delete a task (Admin only)
         UPDATE_TASK_STATUS: (taskId) => `/api/tasks/${taskId}/status`, // Update task status
         UPDATE_TODO_CHECKLIST: (taskId) => `/api/tasks/${taskId}/todo`, // Update todo checklist
+        UPLOAD_ATTACHMENTS: "/api/tasks/upload", // Upload task files (multipart)
+        ADD_COMMENT: (taskId) => `/api/tasks/${taskId}/comments`, // Post a comment
+        DELETE_COMMENT: (taskId, commentId) => `/api/tasks/${taskId}/comments/${commentId}`,
+    },
+    NOTIFICATIONS: {
+        GET_ALL: "/api/notifications",
+        STREAM: "/api/notifications/stream", // Server-Sent Events live feed
+        MARK_READ: (id) => `/api/notifications/${id}/read`,
+        MARK_ALL_READ: "/api/notifications/read-all",
+        DELETE: (id) => `/api/notifications/${id}`,
     },
     REPORTS: {
         EXPORT_TASKS: '/api/reports/export/tasks',

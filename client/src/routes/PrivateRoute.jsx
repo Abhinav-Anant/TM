@@ -1,16 +1,36 @@
+import React, { useContext } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
+import HashLoader from 'react-spinners/HashLoader';
+import { UserContext } from '../context/userContext';
 
-const PrivateRoute = ({ allowedRoutes }) => {
-  // const token = localStorage.getItem("token");
-  // const userRole = localStorage.getItem("role"); 
+const homeFor = (user) => (user.role === 'admin' ? '/admin/dashboard' : '/user/dashboard');
 
-  // if (!token) {
-  //   return <Navigate to="/login" replace />;
-  // }
+/**
+ * Route guard. `allowedRoles` omitted means "any signed-in user".
+ * This is a UX guard only - the API is what actually enforces access.
+ */
+const PrivateRoute = ({ allowedRoles }) => {
+  const { user, loading } = useContext(UserContext);
 
-  // if (allowedRoutes && !allowedRoutes.includes(userRole)) {
-  //   return <Navigate to="/login" replace />;
-  // }
+  // The profile fetch is still in flight. Deciding now would bounce a
+  // signed-in user to /login on every page refresh.
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <HashLoader color="#6366F1" size={70} />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // Wrong role: send them to their own dashboard, never to /login - that
+  // would look like a failed session and invites a redirect loop.
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
+    return <Navigate to={homeFor(user)} replace />;
+  }
 
   return <Outlet />;
 };

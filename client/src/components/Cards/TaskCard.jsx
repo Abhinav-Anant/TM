@@ -2,12 +2,13 @@ import React from 'react';
 import moment from 'moment';
 import Progress from '../layouts/Progress';
 import AvatarGroup from '../layouts/AvatarGroup';
-import { LuPaperclip } from 'react-icons/lu';
+import { LuPaperclip, LuMessageSquare, LuTriangleAlert } from 'react-icons/lu';
+import { categoryColor } from '../../utils/data';
 
 const TaskCard = ({
     title, description, priority,
-    status, progress, createdAt,
-    dueDate, assignedTo, attachmentCount,
+    status, category, progress, createdAt,
+    dueDate, assignedTo, attachmentCount, commentCount,
     completedTodoCount, todoChecklist, onClick
 }) => {
 
@@ -36,21 +37,25 @@ const TaskCard = ({
     const formattedStartDate = createdAt ? moment(createdAt).format("Do MMM YYYY") : 'N/A';
     const formattedDueDate = dueDate ? moment(dueDate).format("Do MMM YYYY") : 'N/A';
     const totalTodoChecklistLength = todoChecklist?.length || 0;
+    const isOverdue = status !== "Completed" && dueDate && moment(dueDate).isBefore(moment(), 'day');
 
     return (
-        <div 
-            className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200 mb-4"
+        <div
+            className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200 mb-4 cursor-pointer"
             onClick={onClick}
         >
-            <div className="flex justify-between p-4">
-                <div className="flex space-x-2">
-                    <div className={`text-[11px] font-medium ${getStatusTagColor(status)} px-4 py-0.5 rounded`}>
-                        {status}
-                    </div>
-                    <div className={`text-[11px] font-medium ${getPriorityTagColor(priority)} px-4 py-0.5 rounded`}>
-                        {priority} Priority
-                    </div>
+            <div className="flex flex-wrap gap-2 p-4">
+                <div className={`text-[11px] font-medium ${getStatusTagColor(status)} px-4 py-0.5 rounded`}>
+                    {status}
                 </div>
+                <div className={`text-[11px] font-medium ${getPriorityTagColor(priority)} px-4 py-0.5 rounded`}>
+                    {priority} Priority
+                </div>
+                {category && (
+                    <div className={`text-[11px] font-medium border px-3 py-0.5 rounded ${categoryColor(category)}`}>
+                        {category}
+                    </div>
+                )}
             </div>
 
             <div className={`px-4 py-3 border-l-4 ${status === "In Progress"
@@ -60,7 +65,7 @@ const TaskCard = ({
                     : 'border-violet-500'
                 }`}>
                 <h3 className="text-xl font-semibold text-gray-800">{title}</h3>
-                <p className="text-sm text-gray-600 mt-2">{description}</p>
+                <p className="text-sm text-gray-600 mt-2 line-clamp-2">{description}</p>
                 <p className="text-sm text-gray-600 mt-2">
                     Task Done {' '}
                     <span className="font-bold">{completedTodoCount}/{totalTodoChecklistLength}</span>
@@ -76,12 +81,21 @@ const TaskCard = ({
                     </div>
                     <div>
                         <label className="block text-xs font-medium text-gray-500">Due date</label>
-                        <p className="text-sm font-semibold text-gray-700">{formattedDueDate}</p>
+                        <p className={`text-sm font-semibold flex items-center gap-1 ${isOverdue ? 'text-rose-600' : 'text-gray-700'}`}>
+                            {isOverdue && <LuTriangleAlert className="text-xs" title="Overdue" />}
+                            {formattedDueDate}
+                        </p>
                     </div>
                 </div>
 
                 <div className="flex items-center space-x-4">
                     <AvatarGroup avatars={assignedTo || []} />
+                    {commentCount > 0 && (
+                        <div className="flex items-center space-x-1">
+                            <LuMessageSquare className="text-gray-600" />
+                            <span className="text-sm text-gray-700">{commentCount}</span>
+                        </div>
+                    )}
                     {attachmentCount > 0 && (
                         <div className="flex items-center space-x-1">
                             <LuPaperclip className="text-gray-600" />

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from "../../components/layouts/DashboardLayout";
 import { API_PATHS } from '../../utils/apiPaths';
-import { PRIORITY_DATA } from '../../utils/data';
+import { PRIORITY_DATA, CATEGORY_DATA } from '../../utils/data';
 import axiosInstance from '../../utils/axiosInstance';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { LuTrash2 } from 'react-icons/lu';
@@ -23,6 +23,7 @@ const CreateTask = () => {
     title: "",
     description: "",
     priority: "Low",
+    category: "General",
     dueDate: null,
     assignedTo: [],
     todoChecklist: [],
@@ -43,6 +44,7 @@ const CreateTask = () => {
       title: "",
       description: "",
       priority: "Low",
+      category: "General",
       dueDate: null,
       assignedTo: [],
       todoChecklist: [],
@@ -139,6 +141,7 @@ const CreateTask = () => {
           title: response.data.title,
           description: response.data.description,
           priority: response.data.priority,
+          category: response.data.category || 'General',
           dueDate: response.data.dueDate ? moment(response.data.dueDate).format('YYYY-MM-DD') : null,
           assignedTo: response.data?.assignedTo?.map((item) => item?._id) || [],
           todoChecklist: response.data?.todoChecklist?.map((item) => item.text) || [],
@@ -215,7 +218,23 @@ const CreateTask = () => {
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label className="text-sm font-medium text-gray-700">Category</label>
+              <input
+                list="task-categories"
+                className="form-input w-full mt-1 rounded-md border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="e.g. Design"
+                value={taskData.category}
+                onChange={({ target }) => handleValueChange("category", target.value)}
+              />
+              <datalist id="task-categories">
+                {CATEGORY_DATA.map((c) => (
+                  <option key={c.value} value={c.value} />
+                ))}
+              </datalist>
+            </div>
+
             <div>
               <label className="text-sm font-medium text-gray-700">Priority</label>
               <SelectDropdown

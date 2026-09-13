@@ -5,9 +5,18 @@ const todoSchema = new mongoose.Schema({
     completed: { type: Boolean, default: false }, 
 });
 
+const commentSchema = new mongoose.Schema({
+    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    text: { type: String, required: true, trim: true, maxlength: 2000 },
+},
+{
+    timestamps: true
+});
+
 const taskSchema = new mongoose.Schema({
     title: { type: String, required: true }, 
     description: { type: String },
+    category: { type: String, default: 'General', trim: true },
     priority: { 
         type: String, 
         enum: ['Low', 'High', 'Medium'], 
@@ -23,12 +32,17 @@ const taskSchema = new mongoose.Schema({
     createdBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     attachments: [{ type: String }], 
     todoChecklist: [todoSchema], 
+    comments: [commentSchema],
     progress: { type: Number, default: 0 }, 
+    completedAt: { type: Date, default: null },
 }, 
 {
     timestamps: true 
 });
 
+taskSchema.index({ dueDate: 1, status: 1 });
+taskSchema.index({ assignedTo: 1 });
+taskSchema.index({ category: 1 });
 
 const Task = mongoose.model("Task", taskSchema);
 

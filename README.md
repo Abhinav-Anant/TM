@@ -18,7 +18,9 @@ A full-featured task management web application built with the **MERN stack** (M
 - [API Endpoints](#-api-endpoints)
 - [Security Features](#-security-features)
 - [Screenshots](#-screenshots)
-- [Future Improvements](#-future-improvements)
+- [Roadmap – Delivered](#-roadmap--delivered)
+- [Mobile App](#-mobile-app)
+- [Future Improvements](#future-improvements)
 - [Contributing](#-contributing)
 - [License](#-license)
 - [Author](#-author)
@@ -198,18 +200,66 @@ Task-Management/
 ### 🗂️ Task Dashboard
 *Comprehensive task management interface*
 
-## 📌 Future Improvements
+## ✅ Roadmap – Delivered
 
-- [ ] **Notifications:** Real-time task reminders and deadline alerts
-- [ ] **Advanced Filtering:** Filter tasks by priority, deadline, or status
-- [ ] **Search Functionality:** Search tasks by title or description
-- [ ] **Task Comments:** Add comments and collaboration features
-- [ ] **File Attachments:** Support for task-related file uploads
-- [ ] **Calendar Integration:** Visual calendar view for task deadlines
-- [ ] **Email Notifications:** Automated email alerts for task updates
-- [ ] **Task Categories:** Organize tasks into different categories
-- [ ] **Progress Tracking:** Visual progress indicators and analytics
-- [ ] **Mobile App:** React Native mobile application
+- [x] **Notifications:** Real-time task reminders and deadline alerts
+- [x] **Advanced Filtering:** Filter tasks by priority, deadline, or status
+- [x] **Search Functionality:** Search tasks by title or description
+- [x] **Task Comments:** Add comments and collaboration features
+- [x] **File Attachments:** Support for task-related file uploads
+- [x] **Calendar Integration:** Visual calendar view for task deadlines
+- [x] **Email Notifications:** Automated email alerts for task updates
+- [x] **Task Categories:** Organize tasks into different categories
+- [x] **Progress Tracking:** Visual progress indicators and analytics
+- [x] **Mobile App:** React Native mobile application
+
+### How each one works
+
+| Feature | Implementation |
+|---|---|
+| **Real-time notifications** | Server-Sent Events at `GET /api/notifications/stream`. The browser reads it with `fetch()` (not `EventSource`) so the JWT stays in the `Authorization` header instead of a query string. Auto-reconnects with capped exponential backoff. Bell + unread badge live in the navbar. |
+| **Deadline alerts** | An in-process scan (`server/utils/reminders.js`) runs every `REMINDER_INTERVAL_MINUTES` and alerts assignees once for *due soon* and once for *overdue* per task. |
+| **Email notifications** | Nodemailer, wired into the same dispatch point as in-app alerts. **Opt-in**: with no `SMTP_HOST`/`SMTP_USER` set, every send is a silent no-op and the app runs normally. HTML bodies are escaped. |
+| **Advanced filtering** | `GET /api/tasks` accepts `status`, `priority`, `category`, `dueAfter`, `dueBefore`, `overdue` and `sortBy`/`sortOrder` (whitelisted fields only). Status tab counts stay consistent with the other active filters. |
+| **Search** | `search` query param, case-insensitive across title and description. Regex metacharacters are escaped, so user input cannot become a wildcard or a ReDoS bomb. Debounced 350&nbsp;ms in the UI. |
+| **Comments** | `comments[]` subdocument on Task. `POST /api/tasks/:id/comments`, `DELETE /api/tasks/:id/comments/:commentId` (author or admin only). Posting notifies every watcher. |
+| **File attachments** | `POST /api/tasks/upload` (multipart, up to 5 files × 15&nbsp;MB). Images, PDF, Office docs, text, CSV, ZIP. Filenames are sanitised; the upload directory is now resolved from `__dirname` so it matches what `/uploads` serves. Pasting a link still works. |
+| **Calendar** | `/calendar` — month grid built with the already-installed `moment` plus CSS grid; no calendar library added. Only fetches the visible date range. |
+| **Categories** | `category` field on Task with a datalist of suggestions in the create form; `GET /api/tasks/categories` returns the ones actually in use. |
+| **Progress tracking** | `GET /api/tasks/analytics` → completion rate, average progress, overdue count, created-vs-completed trend, per-category progress, next deadlines. Rendered at `/analytics` with the charts already in the project. A `completedAt` timestamp now backs the trend. |
+| **Mobile app** | `mobile/` — Expo / React Native. See [mobile/README.md](mobile/README.md). |
+
+### Environment variables
+
+Copy `.env.example` to `.env`. Only `MONGO_URI`, `JWT_SECRET` and `PORT` are required; SMTP and reminder settings are optional.
+
+### Tests
+
+```bash
+npm test        # unit: filters, sort whitelist, progress, SSE registry, email escaping
+npm run test:e2e  # end-to-end: every feature against a live server
+```
+
+`npm run test:e2e` boots an in-memory MongoDB, a fake SMTP sink and the real
+`server/index.js`, then drives the HTTP API the way the clients do — SSE frames,
+the deadline scheduler, multipart uploads, comments, analytics and auth guards.
+No external services required.
+
+## 📱 Mobile App
+
+```bash
+cd mobile && npm install && npx expo start
+```
+
+Point it at your server with `EXPO_PUBLIC_API_URL=http://<your-lan-ip>:8000`.
+Screens: login, task list with search/filters, task detail with checklist and comments, notifications, progress. Full details in [mobile/README.md](mobile/README.md).
+
+## 📌Future Improvements
+
+- [ ] Push notifications on mobile (`expo-notifications`) instead of 30s polling
+- [ ] Move the SSE registry to Redis pub/sub for multi-instance deployments
+- [ ] Move uploads to object storage (S3/Cloudinary) instead of local disk
+- [ ] Pagination on the task list
 
 ## 🤝 Contributing
 

@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Task Manager",
+    "slug": "task-manager",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.taskmanager.app"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "extra": {
+      "apiUrl": "http://localhost:8000"
+    },
+    "plugins": [
+      "expo-asset"
+    ]
+  }
+}
