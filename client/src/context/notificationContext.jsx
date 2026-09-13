@@ -82,7 +82,8 @@ const NotificationProvider = ({ children }) => {
     const removeNotification = useCallback(async (id) => {
         setNotifications((prev) => prev.filter((n) => n._id !== id));
         try {
-            await axiosInstance.delete(API_PATHS.NOTIFICATIONS.DELETE(id));
+            const { data } = await axiosInstance.delete(API_PATHS.NOTIFICATIONS.DELETE(id));
+            setUnreadCount(data?.unreadCount ?? 0);
         } catch {
             fetchNotifications();
         }
@@ -120,7 +121,9 @@ const NotificationProvider = ({ children }) => {
                     if (event.type === "ping" || event.type === "connected") return;
 
                     setNotifications((prev) => [event, ...prev].slice(0, 30));
-                    setUnreadCount((count) => count + 1);
+                    // Server-supplied count, not a local increment - the list is capped
+                    // at 30 so it cannot be derived, and incrementing drifts on replay.
+                    setUnreadCount((count) => event.unreadCount ?? count + 1);
                     toast(event.title, { icon: "🔔" });
                 });
             } catch {

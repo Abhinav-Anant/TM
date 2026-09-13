@@ -20,14 +20,22 @@ const notify = async ({ userIds, actorId, type, title, message = "", task, email
         ids.map((user) => ({ user, task, type, title, message }))
     );
 
-    docs.forEach((doc) => push(doc.user, {
-        _id: doc._id,
-        type: doc.type,
-        title: doc.title,
-        message: doc.message,
-        task: doc.task,
-        read: false,
-        createdAt: doc.createdAt,
+    // Carry the authoritative unread count on the frame - a client that derives it
+    // by incrementing drifts whenever it misses or double-counts an event.
+    // ponytail: one count per recipient per alert. Fold into the insert with an
+    // aggregation if notification volume ever makes this hurt.
+    await Promise.all(docs.map(async (doc) => {
+        const unreadCount = await Notification.countDocuments({ user: doc.user, read: false });
+        push(doc.user, {
+            _id: doc._id,
+            type: doc.type,
+            title: doc.title,
+            message: doc.message,
+            task: doc.task,
+            read: false,
+            createdAt: doc.createdAt,
+            unreadCount,
+        });
     }));
 
     if (email) {

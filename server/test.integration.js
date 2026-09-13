@@ -353,6 +353,40 @@ const waitForServer = async () => {
             "comment notification pushed live"
         );
 
+        // Every frame carries the server's own unread count. A client that increments
+        // locally instead drifts, so the count must be on the wire and must agree with
+        // the list endpoint after several pushes.
+        const counted = stream.events.filter((e) => e.type !== "ping" && e.type !== "connected");
+        assert.ok(
+            counted.every((e) => typeof e.unreadCount === "number"),
+            `every pushed frame must carry unreadCount, got ${JSON.stringify(counted)}`
+        );
+        const streamCounts = counted.map((e) => e.unreadCount);
+        assert.deepStrictEqual(
+            streamCounts,
+            [...streamCounts].sort((a, b) => a - b),
+            "unreadCount must not go backwards across consecutive pushes"
+        );
+
+        const liveList = await call("GET", "/api/notifications", { token: M });
+        assert.strictEqual(
+            streamCounts[streamCounts.length - 1],
+            liveList.body.unreadCount,
+            "the last frame's unreadCount must match GET /api/notifications - no drift"
+        );
+
+        // Deleting an unread notification changes the count, so the delete response
+        // reports it too - otherwise the badge stays high until a refetch.
+        const doomed = liveList.body.notifications.find((n) => !n.read);
+        const removed = await call("DELETE", `/api/notifications/${doomed._id}`, { token: M });
+        assert.strictEqual(removed.status, 200);
+        assert.strictEqual(
+            removed.body.unreadCount,
+            liveList.body.unreadCount - 1,
+            "deleting an unread notification must return the decremented count"
+        );
+        pass("Notifications (unread count)", `server-authoritative across ${streamCounts.length} pushes + delete`);
+
         // ---------- 4. TASK COMMENTS ----------
         const posted = await call("POST", `/api/tasks/${devTask._id}/comments`, { token: M, body: { text: "starting on this now" } });
         assert.strictEqual(posted.status, 201);
