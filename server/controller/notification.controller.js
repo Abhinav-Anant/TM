@@ -62,7 +62,10 @@ const deleteNotification = async (req, res) => {
             return res.status(404).json({ message: "Notification not found" });
         }
 
-        res.json({ message: "Notification deleted" });
+        // Deleting an unread notification changes the count - report it like
+        // markAsRead does, so the client never has to guess.
+        const unreadCount = await Notification.countDocuments({ user: req.user._id, read: false });
+        res.json({ message: "Notification deleted", unreadCount });
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });
     }
