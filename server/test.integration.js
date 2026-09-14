@@ -170,6 +170,23 @@ const uploadFiles = async (token, files) => {
     });
 };
 
+const uploadCsv = async (token, content, name = "members.csv") => {
+    const boundary = `----tmcsv${Date.now()}`;
+    const payload = Buffer.concat([
+        Buffer.from(
+            `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${name}"\r\n` +
+            `Content-Type: text/csv\r\n\r\n`
+        ),
+        Buffer.from(content),
+        Buffer.from(`\r\n--${boundary}--\r\n`),
+    ]);
+
+    return call("POST", "/api/users/import", {
+        token,
+        raw: { headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` }, body: payload },
+    });
+};
+
 const waitForServer = async () => {
     for (let i = 0; i < 120; i += 1) {
         try {
@@ -659,6 +676,58 @@ const waitForServer = async () => {
         const engAfter = (await call("GET", "/api/users/" + engMember._id, { token: A })).body;
         assert.strictEqual(engAfter.department, null, "deleting a department clears its members' department");
         pass("Departments & hierarchy", "admin-only org chart, head fenced to own department, PUT /tasks/:id locked down");
+        // --- CSV member import ------------------------------------------
+        const importRes = await uploadCsv(A, [
+            "name,email,password,department",
+            "Imported One,imported.one@e2e.test,secret123,sales",
+            '"Two, Imported",imported.two@e2e.test,secret123,',
+            "Bad Row,not-an-email,secret123,",
+            "Short Pass,short.pass@e2e.test,abc,",
+            ",noname@e2e.test,secret123,",
+            "Existing Member,member@example.test,secret123,",
+            "Ghost Dept,ghost.dept@e2e.test,secret123,Marketing",
+            "",
+        ].join("\n"));
+
+        assert.strictEqual(importRes.status, 201, `import status ${importRes.status}`);
+        assert.strictEqual(importRes.body.created, 2, "only the two clean rows are created");
+        assert.strictEqual(importRes.body.skipped, 1, "the already-registered email is skipped, not overwritten");
+        assert.deepStrictEqual(
+            importRes.body.errors.map((e) => e.line), [4, 5, 6, 8],
+            "bad rows are reported by their real line in the file"
+        );
+        assert.ok(
+            /Unknown department: Marketing/.test(importRes.body.errors[3].message),
+            "a department that does not exist fails its row instead of importing a department-less user"
+        );
+
+        // The whole point of the password column: the new member can actually log in.
+        const importedLogin = await call("POST", "/api/auth/login", {
+            body: { email: "imported.one@e2e.test", password: "secret123" },
+        });
+        assert.strictEqual(importedLogin.status, 200, "imported member can log in with the CSV password");
+        assert.strictEqual(importedLogin.body.role, "member", "import never grants admin");
+
+        const roster = await call("GET", "/api/users", { token: A });
+        const quoted = roster.body.find((u) => u.email === "imported.two@e2e.test");
+        assert.ok(quoted, "quoted-name row landed in the member list");
+        assert.strictEqual(quoted.name, "Two, Imported", "a comma inside a quoted name does not split the row");
+        assert.strictEqual(quoted.department, null, "a blank department cell imports as no department");
+
+        // "sales" in the file must resolve to the "Sales" department created above.
+        const placed = roster.body.find((u) => u.email === "imported.one@e2e.test");
+        assert.strictEqual(String(placed.department?._id), String(sales._id), "department name resolves case-insensitively");
+
+        // Re-importing the same file must not duplicate anyone.
+        const again = await uploadCsv(A, "name,email,password\nImported One,imported.one@e2e.test,secret123\n");
+        assert.strictEqual(again.body.created, 0);
+        assert.strictEqual(again.body.skipped, 1);
+
+        assert.strictEqual((await uploadCsv(M, "name,email,password\nX,x@e2e.test,secret123\n")).status, 403, "members cannot import");
+        assert.strictEqual((await uploadCsv(A, "id,title\n1,nope\n")).status, 400, "a file without the required columns is rejected");
+        assert.strictEqual((await uploadCsv(A, "name,email,password\n", "members.txt")).status, 400, "non-csv extension is rejected");
+        assert.strictEqual((await call("POST", "/api/users/import", { token: A })).status, 400, "import with no file");
+        pass("CSV Member Import", `created ${importRes.body.created}, skipped ${importRes.body.skipped}, ${importRes.body.errors.length} row errors by line; admin-only`);
 
         console.log("\n  FEATURE VERIFICATION\n  " + "=".repeat(74));
         results.forEach((r) => console.log(`  [PASS] ${r.feature.padEnd(28)} ${r.detail}`));

@@ -12,6 +12,7 @@ export const API_PATHS = {
         GET_ALL_USERS: "/api/users", // Get all users (Admin only)
         GET_USER_BY_ID: (userId) => `/api/users/${userId}`, // Get user by ID
         CREATE_USER: "/api/users", // Create a new user (Admin only)
+        IMPORT_MEMBERS: "/api/users/import", // Bulk-create members from a CSV (Admin only)
         UPDATE_USER: (userId) => `/api/users/${userId}`, // Update user details
         DELETE_USER: (userId) => `/api/users/${userId}`, // Delete a user
     },

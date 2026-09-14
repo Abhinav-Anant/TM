@@ -8,6 +8,7 @@ const assert = require("assert");
 const { buildFilters, buildSort, syncProgress, escapeRegex } = require("./controller/task.controller.js");
 const { addClient, push, connectionCount } = require("./utils/sse.js");
 const { escapeHtml } = require("./utils/mailer.js");
+const { parseMembersCsv } = require("./utils/csv.js");
 
 // buildFilters now takes an already-resolved scope (see server/utils/scope.js)
 // rather than a user, which keeps it pure and synchronous.
@@ -140,5 +141,48 @@ assert.strictEqual(
     "&lt;img src=x onerror=&quot;alert(1)&quot;&gt;",
     "task titles land in HTML email - they must be escaped"
 );
+// --- member CSV import ----------------------------------------------------
+{
+    const BOM = String.fromCharCode(0xFEFF);
+    // Template literal so the fixture reads like a real file: BOM, reordered and
+    // capitalised header, a quoted comma, an escaped quote, then one of each bad row.
+    const { rows, errors } = parseMembersCsv(BOM + `Email,Name,Password
+a@x.com,"Doe, Jane",secret1
+
+b@x.com,Bob,"pa""ss1"
+A@X.com,Dup,secret1
+not-an-email,Carl,secret1
+d@x.com,,secret1
+e@x.com,Eve,short
+`);
+
+    assert.deepStrictEqual(rows, [
+        { name: "Doe, Jane", email: "a@x.com", password: "secret1", department: "", line: 2 },
+        { name: "Bob", email: "b@x.com", password: 'pa"ss1', department: "", line: 4 },
+    ], "valid rows survive quoting, BOM and column order; emails are lowercased");
+
+    assert.deepStrictEqual(errors.map((e) => e.line), [5, 6, 7, 8], "every bad row is reported by file line");
+    assert.ok(/Duplicate/.test(errors[0].message), "same email twice in one file");
+    assert.ok(/Invalid email/.test(errors[1].message));
+    assert.ok(/Name is required/.test(errors[2].message));
+    assert.ok(/at least 6/.test(errors[3].message));
+}
+{
+    // A file missing a column must fail loudly instead of importing blank passwords.
+    const { rows, errors } = parseMembersCsv("name,email\nBob,b@x.com\n");
+    assert.strictEqual(rows.length, 0);
+    assert.ok(/Missing required column/.test(errors[0].message));
+}
+{
+    // department is optional: absent column and blank cell both mean "no department",
+    // and the name is passed through untouched for the controller to resolve to an id.
+    const withDept = parseMembersCsv("name,email,password,department\nA,a@x.com,secret1,Sales\nB,b@x.com,secret1,\n");
+    assert.deepStrictEqual(withDept.errors, []);
+    assert.strictEqual(withDept.rows[0].department, "Sales");
+    assert.strictEqual(withDept.rows[1].department, "", "blank cell is no department, not an error");
+
+    const without = parseMembersCsv("name,email,password\nA,a@x.com,secret1\n");
+    assert.strictEqual(without.rows[0].department, "", "missing column is no department, not an error");
+}
 
 console.log("All smoke checks passed.");

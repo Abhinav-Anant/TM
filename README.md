@@ -182,6 +182,7 @@ Task-Management/
 ### Users (Admin only)
 - `GET /api/users` - Get all users
 - `GET /api/users/:id` - Get specific user
+- `POST /api/users/import` - Bulk-create members from a CSV (admin only, multipart field `file`; columns `name,email,password` plus optional `department` name; existing emails are skipped; sample at `/sample-members.csv`)
 
 ## 🛡️ Security Features
 
