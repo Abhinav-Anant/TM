@@ -2,7 +2,7 @@ import React, { useContext, useEffect, useState } from 'react';
 import { LuLayoutDashboard, LuClipboardCheck, LuSquarePlus, LuLogOut } from 'react-icons/lu';
 import { UserContext } from '../../context/userContext';
 import { useNavigate } from 'react-router-dom';
-import { SIDE_MENU_DATA, SIDE_MENU_USER_DATA } from '../../utils/data';
+import { SIDE_MENU_DATA, SIDE_MENU_USER_DATA, SIDE_MENU_HEAD_DATA } from '../../utils/data';
 
 const SideMenu = ({ activeMenu }) => {
   const { user, clearUser } = useContext(UserContext);
@@ -26,7 +26,11 @@ const SideMenu = ({ activeMenu }) => {
 
   useEffect(() => {
     if (user) {
-      setSideMenuData(user?.role === 'admin' ? SIDE_MENU_DATA : SIDE_MENU_USER_DATA);
+      const menuByRole = {
+        admin: SIDE_MENU_DATA,
+        head: SIDE_MENU_HEAD_DATA,
+      };
+      setSideMenuData(menuByRole[user?.role] || SIDE_MENU_USER_DATA);
     }
   }, [user]);
 
@@ -43,6 +47,11 @@ const SideMenu = ({ activeMenu }) => {
         {user?.role === 'admin' && (
           <div className="text-[10px] font-medium text-white bg-blue-500 px-5 py-1 rounded mt-1">
             Admin
+          </div>
+        )}
+        {user?.role === 'head' && (
+          <div className="text-[10px] font-medium text-white bg-emerald-600 px-5 py-1 rounded mt-1">
+            Head of Department
           </div>
         )}
         <h5 className="text-gray-950 font-medium leading-6 mt-3">{user?.name || ''}</h5>

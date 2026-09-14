@@ -9,12 +9,20 @@ const { buildFilters, buildSort, syncProgress, escapeRegex } = require("./contro
 const { addClient, push, connectionCount } = require("./utils/sse.js");
 const { escapeHtml } = require("./utils/mailer.js");
 
-const admin = { _id: "admin1", role: "admin" };
-const member = { _id: "member1", role: "member" };
+// buildFilters now takes an already-resolved scope (see server/utils/scope.js)
+// rather than a user, which keeps it pure and synchronous.
+const admin = {};
+const member = { assignedTo: "member1" };
+const head = { assignedTo: { $in: ["member1", "member2"] } };
 
 // --- scoping -------------------------------------------------------------
 assert.deepStrictEqual(buildFilters(admin, {}).filter, {}, "admin sees everything");
 assert.deepStrictEqual(buildFilters(member, {}).filter, { assignedTo: "member1" }, "member is scoped to own tasks");
+assert.deepStrictEqual(
+    buildFilters(head, {}).filter,
+    { assignedTo: { $in: ["member1", "member2"] } },
+    "head is scoped to their department"
+);
 
 // --- status is excluded from the count base so tab counts stay meaningful --
 {

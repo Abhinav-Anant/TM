@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { protect, adminOnly } = require('../middleware/authMiddleware.js');
+const { protect, adminOnly, allowRoles } = require('../middleware/authMiddleware.js');
 const { fileUpload } = require('../middleware/uploadMiddleware.js');
 const {
     getDashboardData, getUserDashboardData,
@@ -20,8 +20,9 @@ router.post('/upload', protect, fileUpload.array('files', 5), uploadAttachments)
 
 router.get('/', protect, getTasks);
 router.get('/:id', protect, getTaskById);
-router.post('/', protect, adminOnly, createTask);
-router.put('/:id', protect, updateTask);
+router.post('/', protect, allowRoles("admin", "head"), createTask);
+// Heads may edit tasks in their department; members use /status and /todo instead.
+router.put('/:id', protect, allowRoles("admin", "head"), updateTask);
 router.put('/:id/todo', protect, updateTaskCheckList);
 router.put('/:id/status', protect, updateTaskStatus);
 router.delete('/:id', protect, adminOnly, deleteTask);

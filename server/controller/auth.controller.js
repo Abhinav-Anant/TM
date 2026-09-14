@@ -19,10 +19,14 @@ const registerUser = async (req, res) => {
             return res.status(400).json({ message: "User already exists" });
         }
 
-        // Role assignment with admin invite token validation
+        // Role assignment with invite token validation. The same form field carries
+        // either token; an unset env var must never match an empty submission.
         let role = "member";
         if (adminInviteToken && adminInviteToken === process.env.ADMIN_INVITE_TOKEN) {
             role = "admin";
+        } else if (adminInviteToken && adminInviteToken === process.env.HEAD_INVITE_TOKEN) {
+            // A head starts with no department; an admin assigns them to one.
+            role = "head";
         }
 
         // Hash the password

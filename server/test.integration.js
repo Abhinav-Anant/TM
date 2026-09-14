@@ -17,6 +17,7 @@ const PORT = 4321;
 const SMTP_PORT = 4325;
 const BASE = `http://127.0.0.1:${PORT}`;
 const ADMIN_TOKEN = "let-me-in";
+const HEAD_TOKEN = "lead-me-in";
 const UPLOAD_DIR = path.join(__dirname, "uploads");
 
 const results = [];
@@ -194,6 +195,7 @@ const waitForServer = async () => {
             MONGO_URI: mongo.getUri("taskmanager_e2e"),
             JWT_SECRET: "e2e-secret",
             ADMIN_INVITE_TOKEN: ADMIN_TOKEN,
+            HEAD_INVITE_TOKEN: HEAD_TOKEN,
             CLIENT_URL: "http://localhost:5173",
             SMTP_HOST: "127.0.0.1",
             SMTP_PORT: String(SMTP_PORT),
@@ -542,6 +544,121 @@ const waitForServer = async () => {
         assert.strictEqual((await call("GET", "/api/tasks", { token: "not-a-jwt" })).status, 401);
         assert.strictEqual((await call("POST", "/api/tasks/upload", { token: M })).status, 400, "upload with no file");
         pass("Auth guards", "401 unauthenticated, 403 role-gated, JSON 404 on unknown API route");
+
+
+        // ---------- DEPARTMENTS & HEAD-OF-DEPARTMENT HIERARCHY ----------
+        // Two departments so we can prove a head is fenced into their own.
+        const sales = (await call("POST", "/api/departments", { token: A, body: { name: "Sales" } })).body.department;
+        const eng = (await call("POST", "/api/departments", { token: A, body: { name: "Engineering" } })).body.department;
+        assert.ok(sales._id && eng._id, "admin can create departments");
+        assert.strictEqual(
+            (await call("POST", "/api/departments", { token: A, body: { name: "Sales" } })).status, 409,
+            "duplicate department name is rejected"
+        );
+
+        const headSales = (await call("POST", "/api/auth/register", {
+            body: { name: "Hana Head", email: "head@example.test", password: "pw123456", adminInviteToken: HEAD_TOKEN },
+        })).body;
+        assert.strictEqual(headSales.role, "head", "head invite token grants the head role");
+        const H = headSales.token;
+
+        const salesMember = (await call("POST", "/api/auth/register", {
+            body: { name: "Sam Sales", email: "sam@example.test", password: "pw123456" },
+        })).body;
+        const engMember = (await call("POST", "/api/auth/register", {
+            body: { name: "Eve Eng", email: "eve@example.test", password: "pw123456" },
+        })).body;
+
+        // A head with no department yet can assign to nobody.
+        assert.strictEqual(
+            (await call("POST", "/api/tasks", {
+                token: H, body: { title: "premature", dueDate: day(3), assignedTo: [salesMember._id] },
+            })).status, 403,
+            "head with no department cannot assign"
+        );
+
+        await call("POST", "/api/departments/" + sales._id + "/members", { token: A, body: { userId: headSales._id } });
+        await call("POST", "/api/departments/" + sales._id + "/members", { token: A, body: { userId: salesMember._id } });
+        await call("POST", "/api/departments/" + eng._id + "/members", { token: A, body: { userId: engMember._id } });
+
+        // One head per department.
+        const secondHead = (await call("POST", "/api/auth/register", {
+            body: { name: "Hugo Head", email: "hugo@example.test", password: "pw123456", adminInviteToken: HEAD_TOKEN },
+        })).body;
+        assert.strictEqual(
+            (await call("POST", "/api/departments/" + sales._id + "/members", { token: A, body: { userId: secondHead._id } })).status,
+            409, "a department may only have one head"
+        );
+
+        // Members cannot reshape the org chart.
+        assert.strictEqual((await call("POST", "/api/departments", { token: M, body: { name: "Rogue" } })).status, 403);
+        assert.strictEqual((await call("GET", "/api/departments", { token: M })).status, 403);
+        assert.strictEqual(
+            (await call("POST", "/api/departments/" + sales._id + "/members", { token: H, body: { userId: engMember._id } })).status,
+            403, "a head cannot add members to their own department"
+        );
+
+        // A head sees only their own department.
+        const headDepts = (await call("GET", "/api/departments", { token: H })).body.departments;
+        assert.strictEqual(headDepts.length, 1, "head sees exactly one department");
+        assert.strictEqual(headDepts[0].name, "Sales");
+        assert.strictEqual(
+            (await call("GET", "/api/departments/" + eng._id + "/members", { token: H })).status, 403,
+            "head cannot read another department's members"
+        );
+
+        // Assignment hierarchy.
+        const headTask = await call("POST", "/api/tasks", {
+            token: H, body: { title: "Head assigns in-dept", dueDate: day(3), assignedTo: [salesMember._id] },
+        });
+        assert.strictEqual(headTask.status, 201, "head assigns to their own member");
+        assert.strictEqual(
+            (await call("POST", "/api/tasks", {
+                token: H, body: { title: "Cross-dept", dueDate: day(3), assignedTo: [engMember._id] },
+            })).status, 403,
+            "head cannot assign outside their department"
+        );
+        assert.strictEqual(
+            (await call("POST", "/api/tasks", {
+                token: A, body: { title: "Admin assigns anywhere", dueDate: day(3), assignedTo: [engMember._id, salesMember._id] },
+            })).status, 201,
+            "admin assigns across departments"
+        );
+
+        // The hole this work closed: PUT /api/tasks/:id used to have no check at all.
+        const headTaskId = headTask.body.task._id;
+        assert.strictEqual(
+            (await call("PUT", "/api/tasks/" + headTaskId, { token: M, body: { title: "hijacked" } })).status, 403,
+            "a member cannot edit an arbitrary task"
+        );
+        assert.strictEqual(
+            (await call("PUT", "/api/tasks/" + headTaskId, { token: H, body: { assignedTo: [engMember._id] } })).status, 403,
+            "a head cannot reassign out of their department"
+        );
+        assert.strictEqual(
+            (await call("PUT", "/api/tasks/" + headTaskId, { token: H, body: { title: "Head edit" } })).status, 200,
+            "a head can edit a task in their department"
+        );
+
+        // Dashboard figures are department-scoped, never org-wide.
+        const headDash = (await call("GET", "/api/tasks/dashboard-data", { token: H })).body.data;
+        const adminDash = (await call("GET", "/api/tasks/dashboard-data", { token: A })).body.data;
+        assert.ok(headDash.allTasksCount < adminDash.allTasksCount, "head's task count is scoped, admin's is not");
+        assert.strictEqual(headDash.allUsersCount, 2, "head counts only their own department's people");
+
+        // And so is the assignable-people list.
+        const headUsers = (await call("GET", "/api/users", { token: H })).body.map((u) => u.email).sort();
+        assert.deepStrictEqual(headUsers, ["head@example.test", "sam@example.test"], "head sees only their department");
+        assert.strictEqual(
+            (await call("GET", "/api/users/" + engMember._id, { token: H })).status, 403,
+            "head cannot look up someone outside their department"
+        );
+
+        // Deleting a department detaches its members rather than orphaning the ref.
+        await call("DELETE", "/api/departments/" + eng._id, { token: A });
+        const engAfter = (await call("GET", "/api/users/" + engMember._id, { token: A })).body;
+        assert.strictEqual(engAfter.department, null, "deleting a department clears its members' department");
+        pass("Departments & hierarchy", "admin-only org chart, head fenced to own department, PUT /tasks/:id locked down");
 
         console.log("\n  FEATURE VERIFICATION\n  " + "=".repeat(74));
         results.forEach((r) => console.log(`  [PASS] ${r.feature.padEnd(28)} ${r.detail}`));

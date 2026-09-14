@@ -39,4 +39,14 @@ const adminOnly = (req, res, next) => {
 }
 
 
-module.exports = { adminOnly, protect }
+// Gate a route on a set of roles, e.g. allowRoles("admin", "head").
+const allowRoles = (...roles) => (req, res, next) => {
+    if (req.user && roles.includes(req.user.role)) {
+        next();
+    } else {
+        res.status(403).json({ message: `Access denied, ${roles.join(" or ")} only` });
+    }
+}
+
+
+module.exports = { adminOnly, allowRoles, protect }

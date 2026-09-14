@@ -8,6 +8,7 @@ import axiosInstance from '../utils/axiosInstance';
 import { API_PATHS } from '../utils/apiPaths';
 import { UserContext } from '../context/userContext';
 import { categoryColor } from '../utils/data';
+import { basePathFor, canAssignTasks } from '../utils/roles';
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -64,7 +65,7 @@ const CalendarView = () => {
     }, [tasks]);
 
     const openTask = (task) => {
-        if (user?.role === "admin") navigate("/admin/create-task", { state: { taskId: task._id } });
+        if (canAssignTasks(user)) navigate(`${basePathFor(user)}/create-task`, { state: { taskId: task._id } });
         else navigate(`/user/task-details/${task._id}`);
     };
 

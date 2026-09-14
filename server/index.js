@@ -15,6 +15,7 @@ const userRoutes = require('./routes/user.route.js');
 const taskRoutes = require('./routes/task.route.js');
 const reportsRoutes = require('./routes/reports.route.js');
 const notificationRoutes = require('./routes/notification.route.js');
+const departmentRoutes = require('./routes/department.route.js');
 
 const app = express();
 
@@ -29,6 +30,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/departments', departmentRoutes);
 
 // Serve static files from "uploads" directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

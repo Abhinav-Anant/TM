@@ -31,6 +31,15 @@ export const API_PATHS = {
         ADD_COMMENT: (taskId) => `/api/tasks/${taskId}/comments`, // Post a comment
         DELETE_COMMENT: (taskId, commentId) => `/api/tasks/${taskId}/comments/${commentId}`,
     },
+    DEPARTMENTS: {
+        GET_ALL: "/api/departments",                       // Admin: all · Head: own only
+        CREATE: "/api/departments",                        // Admin only
+        UPDATE: (id) => `/api/departments/${id}`,          // Admin only
+        DELETE: (id) => `/api/departments/${id}`,          // Admin only
+        GET_MEMBERS: (id) => `/api/departments/${id}/members`,
+        ADD_MEMBER: (id) => `/api/departments/${id}/members`,            // { userId }
+        REMOVE_MEMBER: (id, userId) => `/api/departments/${id}/members/${userId}`,
+    },
     NOTIFICATIONS: {
         GET_ALL: "/api/notifications",
         STREAM: "/api/notifications/stream", // Server-Sent Events live feed

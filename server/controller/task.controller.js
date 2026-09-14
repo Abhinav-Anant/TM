@@ -1,23 +1,24 @@
 const Task = require('../model/task.model.js');
 const User = require('../model/user.model.js');
 const { notify } = require('../utils/notify.js');
+const { scopeFor, canAccessTask, canAssignTo, departmentMemberIds } = require('../utils/scope.js');
 
 const SORTABLE_FIELDS = ["dueDate", "createdAt", "updatedAt", "priority", "progress", "title"];
 const PRIORITY_ORDER = { High: 3, Medium: 2, Low: 1 };
 
 const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** Admins see everything, members only what is assigned to them. */
-const scopeFor = (user) => (user.role === "admin" ? {} : { assignedTo: user._id });
-
 /**
  * Builds the Mongo filter from the query string.
+ * Takes an already-resolved `scope` (from utils/scope.js) rather than the user, so
+ * this stays a pure, synchronous function - resolving a head's department members
+ * needs a database round trip and belongs at the call site.
  * Returns `base` (everything except status) so the status tab counts stay
  * consistent with the other active filters.
  */
-const buildFilters = (user, query) => {
+const buildFilters = (scope, query) => {
     const { status, priority, category, search, dueBefore, dueAfter, overdue } = query;
-    const base = { ...scopeFor(user) };
+    const base = { ...scope };
 
     if (priority && priority.trim()) base.priority = priority.trim();
     if (category && category.trim()) base.category = category.trim();
@@ -68,9 +69,17 @@ const watchersOf = (task) => [...(task.assignedTo || []), ...(task.createdBy || 
 
 const getDashboardData = async (req, res) => {
     try {
-        if (req.user.role !== 'admin') {
+        if (!["admin", "head"].includes(req.user.role)) {
             return res.status(403).json({ message: "Unauthorized access" });
         }
+
+        // Every figure on this dashboard is scoped: a head sees their own
+        // department's numbers only, never an org-wide total.
+        const scope = await scopeFor(req.user);
+        const memberIds = req.user.role === "head"
+            ? await departmentMemberIds(req.user.department)
+            : null;
+        const userFilter = memberIds ? { _id: { $in: memberIds } } : {};
 
         const [
             allTasksCount,
@@ -81,13 +90,13 @@ const getDashboardData = async (req, res) => {
             allUsersCount,
             assignedUserIds,
         ] = await Promise.all([
-            Task.countDocuments(),
-            Task.countDocuments({ status: 'Pending' }),
-            Task.countDocuments({ status: 'In Progress' }),
-            Task.countDocuments({ status: 'Completed' }),
-            Task.countDocuments({ status: { $ne: 'Completed' }, dueDate: { $lt: new Date() } }),
-            User.countDocuments(),
-            Task.distinct("assignedTo"),
+            Task.countDocuments(scope),
+            Task.countDocuments({ ...scope, status: 'Pending' }),
+            Task.countDocuments({ ...scope, status: 'In Progress' }),
+            Task.countDocuments({ ...scope, status: 'Completed' }),
+            Task.countDocuments({ ...scope, status: { $ne: 'Completed' }, dueDate: { $lt: new Date() } }),
+            User.countDocuments(userFilter),
+            Task.distinct("assignedTo", scope),
         ]);
 
         res.status(200).json({
@@ -150,7 +159,7 @@ const getUserDashboardData = async (req, res) => {
 // Get all tasks (Admin: all, User: only assigned) with search, filtering and sorting.
 const getTasks = async (req, res) => {
     try {
-        const { base, filter } = buildFilters(req.user, req.query);
+        const { base, filter } = buildFilters(await scopeFor(req.user), req.query);
 
         let tasks = await Task.find(filter)
             .sort(buildSort(req.query))
@@ -186,7 +195,7 @@ const getTasks = async (req, res) => {
 
 const getCategories = async (req, res) => {
     try {
-        const categories = await Task.distinct("category", scopeFor(req.user));
+        const categories = await Task.distinct("category", await scopeFor(req.user));
         res.json({ categories: categories.filter(Boolean).sort() });
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });
@@ -195,7 +204,7 @@ const getCategories = async (req, res) => {
 
 const getAnalytics = async (req, res) => {
     try {
-        const scope = scopeFor(req.user);
+        const scope = await scopeFor(req.user);
         const days = Math.min(Number(req.query.days) || 30, 180);
         const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
         const now = new Date();
@@ -293,12 +302,10 @@ const getTaskById = async (req, res) => {
             return res.status(404).json({ message: "Task not found" });
         }
 
-        // Members may only open tasks assigned to them - a task id is guessable
-        // and the document carries descriptions, attachments and comments.
-        const isAssigned = (task.assignedTo || []).some(
-            (user) => user._id.toString() === req.user._id.toString()
-        );
-        if (!isAssigned && req.user.role !== "admin") {
+        // Members may only open tasks assigned to them, heads only tasks within
+        // their department - a task id is guessable and the document carries
+        // descriptions, attachments and comments.
+        if (!await canAccessTask(req.user, task)) {
             return res.status(403).json({ message: "Not authorized to view this task" });
         }
 
@@ -317,6 +324,11 @@ const createTask = async (req, res) => {
 
         if (!Array.isArray(assignedTo)) {
             return res.status(400).json({ message: "assigned-to must be an array of user ID's" });
+        }
+
+        // Admins assign to anyone; a head only to their own department.
+        if (!await canAssignTo(req.user, assignedTo)) {
+            return res.status(403).json({ message: "You can only assign tasks to members of your own department" });
         }
 
         const task = await Task.create({
@@ -351,6 +363,13 @@ const updateTask = async (req, res) => {
             return res.status(404).json({ message: "Task not found" });
         }
 
+        // The route already limits this to admin/head; a head must additionally
+        // be limited to tasks inside their own department. Without this any
+        // signed-in user could previously edit or reassign any task by id.
+        if (!await canAccessTask(req.user, task)) {
+            return res.status(403).json({ message: "Not authorized to update this task" });
+        }
+
         const previousAssignees = (task.assignedTo || []).map(String);
 
         task.title = req.body.title || task.title;
@@ -364,6 +383,10 @@ const updateTask = async (req, res) => {
         if (req.body.assignedTo) {
             if (!Array.isArray(req.body.assignedTo)) {
                 return res.status(400).json({ message: "assigned-to must be an array of user ID's" });
+            }
+            // Reassignment must not be a way out of your own department.
+            if (!await canAssignTo(req.user, req.body.assignedTo)) {
+                return res.status(403).json({ message: "You can only assign tasks to members of your own department" });
             }
             task.assignedTo = req.body.assignedTo;
         }
@@ -418,10 +441,7 @@ const updateTaskCheckList = async (req, res) => {
             return res.status(404).json({ message: "Task not found" });
         }
 
-        const isAssigned = (task.assignedTo || []).some(
-            (userId) => userId.toString() === req.user._id.toString()
-        );
-        if (!isAssigned && req.user.role !== "admin") {
+        if (!await canAccessTask(req.user, task)) {
             return res.status(403).json({ message: "Not authorized to update checklist" });
         }
 
@@ -459,10 +479,7 @@ const updateTaskStatus = async (req, res) => {
             return res.status(404).json({ message: "Task not found" });
         }
 
-        const isAssigned = (task.assignedTo || []).some(
-            (userId) => userId.toString() === req.user._id.toString()
-        );
-        if (!isAssigned && req.user.role !== "admin") {
+        if (!await canAccessTask(req.user, task)) {
             return res.status(403).json({ message: "Not Authorized" });
         }
 
@@ -511,10 +528,7 @@ const addComment = async (req, res) => {
             return res.status(404).json({ message: "Task not found" });
         }
 
-        const isAssigned = (task.assignedTo || []).some(
-            (userId) => userId.toString() === req.user._id.toString()
-        );
-        if (!isAssigned && req.user.role !== "admin") {
+        if (!await canAccessTask(req.user, task)) {
             return res.status(403).json({ message: "Not authorized to comment on this task" });
         }
 

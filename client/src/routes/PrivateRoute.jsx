@@ -2,8 +2,9 @@ import React, { useContext } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import HashLoader from 'react-spinners/HashLoader';
 import { UserContext } from '../context/userContext';
+import { homeFor } from '../utils/roles';
 
-const homeFor = (user) => (user.role === 'admin' ? '/admin/dashboard' : '/user/dashboard');
+
 
 /**
  * Route guard. `allowedRoles` omitted means "any signed-in user".

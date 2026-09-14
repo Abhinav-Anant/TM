@@ -2,11 +2,20 @@ const express = require("express");
 const Task = require('../model/task.model.js')
 const User = require('../model/user.model.js')
 const bcrypt = require("bcryptjs");
+const { departmentMemberIds } = require('../utils/scope.js');
 
 
 const getUser = async (req, res) => {
     try {
-        const users = await User.find({ role: 'member' }).select("-password");
+        // Admins may assign to anyone (members and heads alike); a head only ever
+        // sees the people in their own department.
+        const filter = req.user.role === "head"
+            ? { _id: { $in: await departmentMemberIds(req.user.department) } }
+            : { role: { $in: ["member", "head"] } };
+
+        const users = await User.find(filter)
+            .select("-password")
+            .populate("department", "name");
 
         const usersWithTaskCounts = [];
         for (const user of users) {
@@ -33,6 +42,17 @@ const getUserById = async (req, res) => {
 
     try {
         const userId = req.params.id;
+
+        // Heads may only look up their own department; members only themselves.
+        if (req.user.role !== "admin") {
+            const allowed = req.user.role === "head"
+                ? (await departmentMemberIds(req.user.department)).map(String)
+                : [String(req.user._id)];
+            if (!allowed.includes(String(userId))) {
+                return res.status(403).json({ message: "Not authorized to view this user" });
+            }
+        }
+
         const user = await User.findById(userId).select('-password');
         if (!user) {
             return res.status(404).json({ message: "User not found" })

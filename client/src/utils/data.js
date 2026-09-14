@@ -1,6 +1,6 @@
 import {
   LuLayoutDashboard, LuClipboardCheck, LuSquarePlus, LuLogOut, LuUsers,
-  LuCalendarDays, LuChartColumnBig,
+  LuCalendarDays, LuChartColumnBig, LuBuilding2,
 } from 'react-icons/lu';
 
 export const SIDE_MENU_DATA = [
@@ -42,10 +42,28 @@ export const SIDE_MENU_DATA = [
   },
   {
     id: "07",
+    label: "Departments",
+    icon: LuBuilding2,
+    path: "/admin/departments"
+  },
+  {
+    id: "08",
     label: "Log Out",
     icon: LuLogOut,
     path: "logout",
   }
+];
+
+// Heads get the same screens as an admin, minus anything org-wide: the API
+// scopes every one of these to their own department.
+export const SIDE_MENU_HEAD_DATA = [
+  { id: "01", label: "Dashboard", icon: LuLayoutDashboard, path: "/head/dashboard" },
+  { id: "02", label: "Manage Tasks", icon: LuClipboardCheck, path: "/head/tasks" },
+  { id: "03", label: "Create Task", icon: LuSquarePlus, path: "/head/create-task" },
+  { id: "04", label: "Calendar", icon: LuCalendarDays, path: "/calendar" },
+  { id: "05", label: "Analytics", icon: LuChartColumnBig, path: "/analytics" },
+  { id: "06", label: "My Department", icon: LuUsers, path: "/head/users" },
+  { id: "07", label: "Log Out", icon: LuLogOut, path: "logout" },
 ];
 
 export const SIDE_MENU_USER_DATA = [

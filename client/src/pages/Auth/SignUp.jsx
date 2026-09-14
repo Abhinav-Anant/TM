@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import Input from '../../customcomponent/Input';
 import ProfilePhotoSelector from '../../customcomponent/ProfilePhotoSelector';
 import { UserContext } from '../../context/userContext';
+import { homeFor } from '../../utils/roles';
 import axiosInstance from "../../utils/axiosInstance";
 import uploadImage from '../../utils/uploadImage';
 import {API_PATHS} from '../../utils/apiPaths'
@@ -78,11 +79,7 @@ const SignUp = () => {
         localStorage.setItem("token", token)
         updatedUser(response.data)
       }
-      if (role === 'admin') {
-        navigate('/admin/dashboard');
-      } else {
-        navigate('/user/dashboard')
-      }
+      navigate(homeFor({ role }));
 
 
 

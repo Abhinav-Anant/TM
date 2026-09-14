@@ -5,6 +5,7 @@ import Input from '../../customcomponent/Input';
 import axiosInstance from '../../utils/axiosInstance';
 import { API_PATHS } from '../../utils/apiPaths';
 import { UserContext } from '../../context/userContext';
+import { homeFor } from '../../utils/roles';
 
 const Login = () => {
   // State hooks for managing form inputs and error messages
@@ -52,12 +53,8 @@ const Login = () => {
       if (token) {
         localStorage.setItem("token", token); // Storing the token in localStorage
 
-        // Redirect based on user role
-        if (role === 'admin') {
-          navigate('/admin/dashboard'); // Correct path
-        } else {
-          navigate('/user/dashboard'); // Correct path
-        }
+        // Redirect to the section that belongs to this role.
+        navigate(homeFor({ role }));
 
 
       }

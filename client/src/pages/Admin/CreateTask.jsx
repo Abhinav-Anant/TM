@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import DashboardLayout from "../../components/layouts/DashboardLayout";
 import { API_PATHS } from '../../utils/apiPaths';
 import { PRIORITY_DATA, CATEGORY_DATA } from '../../utils/data';
@@ -13,8 +13,11 @@ import TodoListInput from '../../customcomponent/TodoListInput';
 import AddAttachmentsInput from '../../customcomponent/AddAttachmentsInput';
 import Modal from '../../components/layouts/Modal';
 import DeleteAlert from '../../customcomponent/DeleteAlert';
+import { UserContext } from '../../context/userContext';
+import { basePathFor } from '../../utils/roles';
 
 const CreateTask = () => {
+  const { user } = useContext(UserContext);
   const location = useLocation();
   const { taskId } = location.state || {};
   const navigate = useNavigate();
@@ -68,7 +71,7 @@ const CreateTask = () => {
 
       toast.success("Task Created Successfully");
       clearData();
-      navigate('/admin/tasks');
+      navigate(`${basePathFor(user)}/tasks`);
     } catch (error) {
       setError("Something went wrong. Please try again.");
       console.error("Error creating task:", error);
@@ -162,7 +165,7 @@ const CreateTask = () => {
       await axiosInstance.delete(API_PATHS.TASKS.DELETE_TASK(taskId));
       setOpenDeleteAlert(false);
       toast.success("Task deleted successfully");
-      navigate('/admin/tasks');
+      navigate(`${basePathFor(user)}/tasks`);
     } catch (error) {
       toast.error("Failed to delete task");
       console.error("Error deleting task:", error.response?.data?.message || error.message);
