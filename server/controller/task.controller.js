@@ -67,6 +67,22 @@ const withCompletedCount = (task) => {
 /** Everyone who should hear about a change to this task. */
 const watchersOf = (task) => [...(task.assignedTo || []), ...(task.createdBy || [])];
 
+/**
+ * Completion is the one event that escalates past the people directly on the task:
+ * the assignees' department heads and every admin are copied too, so a head hears
+ * about their own department's work even on a task an admin created and assigned.
+ * notify() de-duplicates and drops the actor, so overlap with watchersOf is free.
+ */
+const completionWatchers = async (task) => {
+    const assignees = await User.find({ _id: { $in: task.assignedTo || [] } }).select("department");
+    const departments = [...new Set(assignees.map((user) => user.department).filter(Boolean).map(String))];
+    const oversight = await User.find({
+        $or: [{ role: "admin" }, { role: "head", department: { $in: departments } }],
+    }).select("_id");
+
+    return [...watchersOf(task), ...oversight.map((user) => user._id)];
+};
+
 const getDashboardData = async (req, res) => {
     try {
         if (!["admin", "head"].includes(req.user.role)) {
@@ -342,7 +358,7 @@ const createTask = async (req, res) => {
 
         await notify({
             userIds: assignedTo,
-            actorId: req.user._id,
+            actor: req.user,
             type: "assigned",
             task: task._id,
             title: `New task: ${task.title}`,
@@ -397,7 +413,7 @@ const updateTask = async (req, res) => {
 
         await notify({
             userIds: currentAssignees.filter((id) => !previousAssignees.includes(id)),
-            actorId: req.user._id,
+            actor: req.user,
             type: "assigned",
             task: task._id,
             title: `New task: ${task.title}`,
@@ -406,7 +422,7 @@ const updateTask = async (req, res) => {
 
         await notify({
             userIds: currentAssignees.filter((id) => previousAssignees.includes(id)),
-            actorId: req.user._id,
+            actor: req.user,
             type: "updated",
             task: task._id,
             title: `Task updated: ${task.title}`,
@@ -452,8 +468,8 @@ const updateTaskCheckList = async (req, res) => {
 
         if (!wasCompleted && task.status === "Completed") {
             await notify({
-                userIds: watchersOf(task),
-                actorId: req.user._id,
+                userIds: await completionWatchers(task),
+                actor: req.user,
                 type: "status",
                 task: task._id,
                 title: `Completed: ${task.title}`,
@@ -501,8 +517,8 @@ const updateTaskStatus = async (req, res) => {
 
         if (previousStatus !== task.status) {
             await notify({
-                userIds: watchersOf(task),
-                actorId: req.user._id,
+                userIds: task.status === "Completed" ? await completionWatchers(task) : watchersOf(task),
+                actor: req.user,
                 type: "status",
                 task: task._id,
                 title: `${task.title} is now ${task.status}`,
@@ -537,7 +553,7 @@ const addComment = async (req, res) => {
 
         await notify({
             userIds: watchersOf(task),
-            actorId: req.user._id,
+            actor: req.user,
             type: "comment",
             task: task._id,
             title: `New comment on ${task.title}`,

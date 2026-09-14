@@ -18,11 +18,20 @@ const escapeHtml = (str) => String(str ?? "").replace(/[&<>"']/g, (c) => (
     { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
 ));
 
-const sendMail = async ({ to, subject, text, html }) => {
+/**
+ * `fromName` / `replyTo` let an alert read as coming from the person who caused it
+ * (the admin or head who assigned, the member who started) while the envelope stays
+ * on our own domain - so SPF/DKIM still pass and replies reach a real human.
+ * The object form of `from` is deliberate: nodemailer MIME-encodes the display name,
+ * which a hand-built `"name" <addr>` string would not, leaving a header-injection hole.
+ */
+const sendMail = async ({ to, subject, text, html, fromName, replyTo }) => {
     if (!transporter || !to) return false;
+    const address = MAIL_FROM || SMTP_USER;
     try {
         await transporter.sendMail({
-            from: MAIL_FROM || SMTP_USER,
+            from: fromName ? { name: fromName, address } : address,
+            replyTo,
             to,
             subject,
             text,

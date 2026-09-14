@@ -547,6 +547,11 @@ const waitForServer = async () => {
         assert.ok(/To:.*member@example\.test/i.test(joined), "addressed to the assignee");
         assert.ok(/tasks@example\.test/i.test(joined), "MAIL_FROM honoured");
         assert.ok(/localhost:5173\/user\/task-details\//.test(joined), "deep link back to the task");
+        // An alert reads as coming from the person who caused it, while the envelope
+        // address stays on our own domain so SPF/DKIM still pass. Reply goes to them.
+        assert.ok(/From: "Ada Admin \(Task Manager\)" <tasks@example\.test>/.test(joined),
+            "actor name on the From header, app address in the envelope");
+        assert.ok(/Reply-To: admin@example\.test/i.test(joined), "replying reaches the assigner directly");
         pass("Email Notifications", `${mails.length} message(s) delivered to the SMTP sink, addressed + deep-linked`);
 
         // escaping holds on the wire
@@ -696,6 +701,27 @@ const waitForServer = async () => {
         const adminDash = (await call("GET", "/api/tasks/dashboard-data", { token: A })).body.data;
         assert.ok(headDash.allTasksCount < adminDash.allTasksCount, "head's task count is scoped, admin's is not");
         assert.strictEqual(headDash.allUsersCount, 2, "head counts only their own department's people");
+
+        // Completion escalates past the task's own people: the assignee's department
+        // head is copied even though they neither created it nor were assigned it.
+        const escalated = (await call("POST", "/api/tasks", {
+            token: A, body: { title: "Quarterly numbers", dueDate: day(4), assignedTo: [salesMember._id] },
+        })).body.task;
+        assert.strictEqual(
+            (await call("PUT", "/api/tasks/" + escalated._id + "/status", {
+                token: salesMember.token, body: { status: "Completed" },
+            })).status, 200, "assignee completes their own task"
+        );
+
+        let headAlerts = [];
+        for (let i = 0; i < 10; i += 1) {
+            await sleep(300);
+            headAlerts = (await call("GET", "/api/notifications?limit=100", { token: H }))
+                .body.notifications.filter((n) => /Quarterly numbers is now Completed/.test(n.title));
+            if (headAlerts.length) break;
+        }
+        assert.strictEqual(headAlerts.length, 1, "the department head is copied on a completion, exactly once");
+        pass("Completion escalation", "department head notified on a completion they were neither assigned nor created");
 
         // And so is the assignable-people list.
         const headUsers = (await call("GET", "/api/users", { token: H })).body.map((u) => u.email).sort();
