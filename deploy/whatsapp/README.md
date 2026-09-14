@@ -42,10 +42,17 @@ box — only the taskmanager restart is passwordless):
 bash /opt/taskmanager/deploy/whatsapp/install-blastup.sh
 ```
 
-It clones to `/opt/blastup`, generates secrets, builds both halves, seeds the
-admin account and installs two systemd units — `blastup-api` and `blastup-ui`.
-It prints the generated dashboard password once; it is also in
+It installs Redis, clones to `/opt/blastup`, generates secrets, builds both
+halves, seeds the admin account and installs two systemd units — `blastup-api`
+and `blastup-ui`. The generated dashboard password lives in
 `/opt/blastup/server/.env`.
+
+**Redis is required, not optional.** Blastup wraps the Baileys socket in SafeMode
+and SafeMode's store is Redis, so *every* send goes through it — without Redis
+sends fail rather than merely degrade. Its own fallback to an in-memory store
+never fires, because that `catch` only wraps client construction, which succeeds
+even when nothing is listening on 6379. The symptom is a loop of
+`Redis connection error` in the journal.
 
 systemd, not pm2, deliberately: pm2 was already tried on this host and failed
 because systemd's `CHASE_SAFE` refuses to read a PID file under an unprivileged
@@ -113,6 +120,8 @@ You should see the send and WhatsApp's acknowledgement. If nothing arrives:
 | App log: `WhatsApp send failed (401)` | API key wrong or deleted in the dashboard |
 | App log: `WhatsApp send failed (4xx)` about connection | Session dropped — re-scan the QR |
 | Nothing logged at all for one person | That member has no number saved |
+| `blastup-api` journal loops on `Redis connection error` | `redis-server` not installed or not running — sends will fail |
+| Dashboard loads but is unstyled | `.next/static` was not copied into `.next/standalone` after the build |
 
 ## What this does not do
 

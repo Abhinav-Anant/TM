@@ -32,6 +32,18 @@ NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
 systemctl is-active --quiet mongod || { echo "mongod is not running" >&2; exit 1; }
 echo "    node $(node -v), mongod active"
 
+# Blastup wraps the Baileys socket in SafeMode and SafeMode's store is Redis, so
+# every send goes through it - without Redis, sends fail rather than merely
+# degrade. Its in-code fallback to a memory store never fires: that catch only
+# wraps client construction, which succeeds even when nothing is listening.
+echo "==> Redis"
+if ! systemctl is-active --quiet redis-server; then
+    apt-get update -qq
+    apt-get install -y redis-server
+    systemctl enable --now redis-server
+fi
+redis-cli ping
+
 echo "==> Fetching source into $PREFIX"
 if [ -d "$PREFIX/.git" ]; then
     git -C "$PREFIX" pull --ff-only
@@ -77,6 +89,12 @@ cd "$PREFIX"
 npm run install:all
 npm run build
 
+# Next.js excludes these from the standalone bundle on purpose; without the copy
+# the dashboard loads with no CSS or client JS.
+echo "==> Copying standalone assets"
+cp -r client/.next/static client/.next/standalone/.next/static
+[ -d client/public ] && cp -r client/public client/.next/standalone/public
+
 echo "==> Seeding the admin account"
 npm run seed || echo "    (already seeded)"
 
@@ -86,7 +104,7 @@ echo "==> Installing systemd units"
 cat > /etc/systemd/system/blastup-api.service <<EOF
 [Unit]
 Description=Blastup WhatsApp API
-After=network.target mongod.service
+After=network.target mongod.service redis-server.service
 Requires=mongod.service
 
 [Service]
@@ -111,12 +129,12 @@ After=network.target blastup-api.service
 [Service]
 Type=simple
 User=$SERVICE_USER
-WorkingDirectory=$PREFIX/client
+WorkingDirectory=$PREFIX/client/.next/standalone
 Environment=NODE_ENV=production
 Environment=PORT=3000
 # Loopback only: the dashboard is reached over an SSH tunnel, never published.
 Environment=HOSTNAME=127.0.0.1
-ExecStart=/usr/bin/node .next/standalone/server.js
+ExecStart=/usr/bin/node server.js
 Restart=always
 RestartSec=5
 
