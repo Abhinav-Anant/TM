@@ -1,21 +1,21 @@
 const Notification = require('../model/notification.model.js');
 const User = require('../model/user.model.js');
 const { push } = require('./sse.js');
-const { sendMail, escapeHtml } = require('./mailer.js');
+const { sendWhatsApp } = require('./whatsapp.js');
 
 const CLIENT_URL = process.env.CLIENT_URL || "";
 
 /**
  * Single dispatch point for every alert: stores an in-app notification,
- * pushes it over SSE and (when SMTP is configured) emails the recipient.
- * Duplicates and the actor themselves are filtered out.
+ * pushes it over SSE and (when the WhatsApp gateway is configured) messages
+ * the recipient. Duplicates and the actor themselves are filtered out.
  *
  * `actor` is the user whose action caused the alert (a full user doc, usually
- * `req.user`). Passing it makes the mail read as being from them - assigner to
- * assignee, member back to whoever assigned it. Omit it for system-generated
- * alerts like deadline reminders, which then send under the plain app identity.
+ * `req.user`). Their name is already baked into `message` by the caller; this
+ * is what keeps them from being notified about their own action. Omit it for
+ * system-generated alerts like deadline reminders.
  */
-const notify = async ({ userIds, actor, type, title, message = "", task, email = true }) => {
+const notify = async ({ userIds, actor, type, title, message = "", task }) => {
     const actorId = actor && actor._id;
     const ids = [...new Set((userIds || []).filter(Boolean).map(String))]
         .filter((id) => !actorId || id !== String(actorId));
@@ -44,22 +44,15 @@ const notify = async ({ userIds, actor, type, title, message = "", task, email =
         });
     }));
 
-    if (email) {
-        const users = await User.find({ _id: { $in: ids } }).select("email name");
-        const link = task ? `${CLIENT_URL}/user/task-details/${task}` : CLIENT_URL;
-        const fromName = actor && actor.name ? `${actor.name} (Task Manager)` : undefined;
+    // Only people who saved a number get a message; everyone else still has the
+    // in-app alert, so a missing number degrades reach, never delivery.
+    const recipients = await User.find({ _id: { $in: ids }, phone: { $ne: null } }).select("phone name");
+    const link = task ? `${CLIENT_URL}/user/task-details/${task}` : CLIENT_URL;
 
-        await Promise.all(users.map((user) => sendMail({
-            to: user.email,
-            replyTo: actor && actor.email ? actor.email : undefined,
-            fromName,
-            subject: title,
-            text: `Hi ${user.name},\n\n${message}\n\n${link}`,
-            html: `<p>Hi ${escapeHtml(user.name)},</p>`
-                + `<p>${escapeHtml(message)}</p>`
-                + (link ? `<p><a href="${escapeHtml(link)}">Open in Task Manager</a></p>` : ""),
-        })));
-    }
+    await Promise.all(recipients.map((user) => sendWhatsApp({
+        to: user.phone,
+        text: `*${title}*\n\nHi ${user.name},\n${message}` + (link ? `\n\n${link}` : ""),
+    })));
 
     return docs;
 };

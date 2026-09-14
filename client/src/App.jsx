@@ -13,6 +13,7 @@ import MyTasks from './pages/User/MyTasks';
 import ViewTaskDetails from './pages/User/ViewTaskDetails';
 import CalendarView from './pages/CalendarView';
 import Analytics from './pages/Analytics';
+import Profile from './pages/Profile';
 import UserProvider, { UserContext } from './context/userContext';
 import { homeFor } from './utils/roles';
 import NotificationProvider from './context/notificationContext';
@@ -60,6 +61,7 @@ const App = () => {
                 <Route path="/user/task-details/:id" element={<ViewTaskDetails />} />
                 <Route path="/calendar" element={<CalendarView />} />
                 <Route path="/analytics" element={<Analytics />} />
+                <Route path="/profile" element={<Profile />} />
               </Route>
 
               {/* default path */}

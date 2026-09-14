@@ -7,6 +7,7 @@ export const API_PATHS = {
         REGISTER: "/api/auth/register", // Register a new user (Admin or Member)
         LOGIN: "/api/auth/login", // Authenticate user & return JWT token
         GET_PROFILE: "/api/auth/profile", // Get logged-in user details
+        UPDATE_PROFILE: "/api/auth/profile", // Update own name / WhatsApp number
     },
     USERS: {
         GET_ALL_USERS: "/api/users", // Get all users (Admin only)

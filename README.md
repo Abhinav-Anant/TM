@@ -209,7 +209,7 @@ Task-Management/
 - [x] **Task Comments:** Add comments and collaboration features
 - [x] **File Attachments:** Support for task-related file uploads
 - [x] **Calendar Integration:** Visual calendar view for task deadlines
-- [x] **Email Notifications:** Automated email alerts for task updates
+- [x] **WhatsApp Notifications:** Automated WhatsApp alerts for task updates
 - [x] **Task Categories:** Organize tasks into different categories
 - [x] **Progress Tracking:** Visual progress indicators and analytics
 - [x] **Mobile App:** React Native mobile application
@@ -220,7 +220,8 @@ Task-Management/
 |---|---|
 | **Real-time notifications** | Server-Sent Events at `GET /api/notifications/stream`. The browser reads it with `fetch()` (not `EventSource`) so the JWT stays in the `Authorization` header instead of a query string. Auto-reconnects with capped exponential backoff. Bell + unread badge live in the navbar. |
 | **Deadline alerts** | An in-process scan (`server/utils/reminders.js`) runs every `REMINDER_INTERVAL_MINUTES` and alerts assignees once for *due soon* and once for *overdue* per task. |
-| **Email notifications** | Nodemailer, wired into the same dispatch point as in-app alerts. **Opt-in**: with no `SMTP_HOST`/`SMTP_USER` set, every send is a silent no-op and the app runs normally. HTML bodies are escaped. Each alert carries the acting user in the `From` display name and their address in `Reply-To`, so an assignment reads as coming from the admin or head who made it and a reply reaches them. A self-hosted Stalwart relay is documented in [deploy/mail/README.md](deploy/mail/README.md). |
+| **WhatsApp notifications** | Alerts go out over a self-hosted [Blastup](https://github.com/kalpintelligence/Blastup) gateway (Baileys), wired into the same dispatch point as in-app alerts. **Opt-in**: with no `BLASTUP_URL`/`BLASTUP_API_KEY` set, every send is a silent no-op and the app runs normally. Only members who saved a number are messaged - everyone else still gets the in-app and SSE alert, so a missing number costs reach, never delivery. Setup in [deploy/whatsapp/README.md](deploy/whatsapp/README.md). |
+| **Member phone numbers** | `User.phone`, editable at `/profile` by every role, with a dismissable banner nagging anyone who has not set one. Normalised on save to the bare international form the gateway wants (`919876543210`); a 10-digit number is assumed to be `DEFAULT_COUNTRY_CODE`. Junk is rejected with a 400 rather than stored. |
 | **Completion escalation** | Assignment and status changes notify the task's own people (`assignedTo` + `createdBy`). Completion additionally copies the assignees' department heads and every admin, so a head hears about their department's work even on a task an admin created. |
 | **Advanced filtering** | `GET /api/tasks` accepts `status`, `priority`, `category`, `dueAfter`, `dueBefore`, `overdue` and `sortBy`/`sortOrder` (whitelisted fields only). Status tab counts stay consistent with the other active filters. |
 | **Search** | `search` query param, case-insensitive across title and description. Regex metacharacters are escaped, so user input cannot become a wildcard or a ReDoS bomb. Debounced 350&nbsp;ms in the UI. |
@@ -233,16 +234,16 @@ Task-Management/
 
 ### Environment variables
 
-Copy `.env.example` to `.env`. Only `MONGO_URI`, `JWT_SECRET` and `PORT` are required; SMTP and reminder settings are optional.
+Copy `.env.example` to `.env`. Only `MONGO_URI`, `JWT_SECRET` and `PORT` are required; WhatsApp gateway and reminder settings are optional.
 
 ### Tests
 
 ```bash
-npm test        # unit: filters, sort whitelist, progress, SSE registry, email escaping
+npm test        # unit: filters, sort whitelist, progress, SSE registry, phone normalisation
 npm run test:e2e  # end-to-end: every feature against a live server
 ```
 
-`npm run test:e2e` boots an in-memory MongoDB, a fake SMTP sink and the real
+`npm run test:e2e` boots an in-memory MongoDB, a fake WhatsApp gateway and the real
 `server/index.js`, then drives the HTTP API the way the clients do — SSE frames,
 the deadline scheduler, multipart uploads, comments, analytics and auth guards.
 No external services required.

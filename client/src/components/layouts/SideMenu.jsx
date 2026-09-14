@@ -56,6 +56,9 @@ const SideMenu = ({ activeMenu }) => {
         )}
         <h5 className="text-gray-950 font-medium leading-6 mt-3">{user?.name || ''}</h5>
         <p className="text-gray-500 text-[12px]">{user?.email || ''}</p>
+        <p className="text-gray-500 text-[12px] mt-0.5">
+          {user?.phone ? `WhatsApp: +${user.phone}` : 'No WhatsApp number'}
+        </p>
       </div>
       {sideMenuData.map((item, index) => (
         <button
