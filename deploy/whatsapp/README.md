@@ -89,6 +89,39 @@ The boot log flips from `WhatsApp notifications: disabled` to `enabled`. Until
 both `BLASTUP_URL` and `BLASTUP_API_KEY` are set, every send is a deliberate
 no-op and the app runs normally — a half-finished gateway cannot take it down.
 
+## 3a. Two hardening steps (both need root)
+
+Run these once, from the Proxmox console or an interactive SSH session:
+
+```bash
+sudo bash /opt/taskmanager/deploy/whatsapp/safemode-ist.sh
+sudo bash /opt/taskmanager/deploy/whatsapp/bind-loopback.sh
+```
+
+**`safemode-ist.sh`** — Safe Mode ships tuned for bulk marketing from a cold number,
+not transactional alerts, and two of its rules break this use case:
+
+- Its sending window is checked *before* the tier config, so even Tier 5 enforces
+  it, and it **throws rather than queues** — a blocked alert is lost, not delayed.
+  The default 09:00–21:00 UTC is 14:30–02:30 IST, which kills every alert sent
+  before 14:30 IST. The script widens it to 07:30–22:30 IST and enables Tier 5.
+- Tiers 1–2 block links in a first message and every alert carries a task deep
+  link; Tier 1 also allows zero new chats per day, so no new colleague could ever
+  be messaged. Use Tier 5 — the warm-up tiers are for a different job.
+
+Every tier keeps a `minGapMs` (1s at Tier 5) and rejects anything faster, which is
+why `notify()` paces its sends (`WHATSAPP_SEND_GAP_MS`, default 1200ms) instead of
+firing them concurrently — a completion notifies assignees, their head and every
+admin at once.
+
+**`bind-loopback.sh`** — the API's `server.listen(env.PORT)` takes no host, so Node
+binds every interface and the app exposes no setting to change it. ufw is otherwise
+the only thing keeping an API that controls a linked WhatsApp account off the
+internet. The script binds it to 127.0.0.1.
+
+Both edit vendored files, so a `git pull` in `/opt/blastup` clobbers them. Both are
+idempotent and keep a `.orig`, so just re-run them.
+
 ## 4. Members add their numbers
 
 Every signed-in user has **My Profile** in the sidebar. Anyone without a number
