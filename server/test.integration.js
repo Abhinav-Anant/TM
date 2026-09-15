@@ -180,6 +180,7 @@ const waitForServer = async () => {
             BLASTUP_URL: `http://127.0.0.1:${BLASTUP_PORT}`,
             BLASTUP_API_KEY: BLASTUP_KEY,
             DEFAULT_COUNTRY_CODE: "91",
+            WHATSAPP_SEND_GAP_MS: "0", // pacing is a gateway concern; keep the suite quick
             REMINDER_WINDOW_HOURS: "24",
             REMINDER_INTERVAL_MINUTES: "0.05", // 3s, so the scan is observable
             NODE_ENV: "test",
