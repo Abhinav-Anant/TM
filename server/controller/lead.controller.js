@@ -193,6 +193,37 @@ const updateLead = async (req, res) => {
     }
 };
 
+const updateLeadStage = async (req, res) => {
+    try {
+        const { stage, note, lostReason } = req.body;
+
+        const allowed = Lead.schema.path('stage').enumValues;
+        if (!allowed.includes(stage)) {
+            return res.status(400).json({ message: `stage must be one of: ${allowed.join(", ")}` });
+        }
+
+        const lead = await findScopedLead(req);
+        if (!lead) return res.status(404).json({ message: "Lead not found" });
+
+        const from = lead.stage;
+        lead.stage = stage;
+        // Any stage may move to any other: the pipeline is a label, not a state
+        // machine. Reps skip Demo, and a deal legitimately comes back from Lost.
+        lead.closedAt = CLOSED_STAGES.includes(stage) ? new Date() : null;
+        if (stage === "Lost" && lostReason !== undefined) lead.lostReason = lostReason;
+
+        lead.history.push({
+            by: req.user._id,
+            text: note ? `${from} → ${stage} — ${note}` : `${from} → ${stage}`,
+        });
+
+        await lead.save();
+        res.json({ message: "Stage updated successfully", lead });
+    } catch (error) {
+        res.status(500).json({ message: "Server error", error: error.message });
+    }
+};
+
 const deleteLead = async (req, res) => {
     try {
         const lead = await Lead.findByIdAndDelete(req.params.id);
@@ -207,6 +238,6 @@ const deleteLead = async (req, res) => {
 };
 
 module.exports = {
-    createLead, listLeads, getLeadById, updateLead, deleteLead,
+    createLead, listLeads, getLeadById, updateLead, updateLeadStage, deleteLead,
     createFollowUp, findScopedLead, buildLeadFilters, CLOSED_STAGES,
 };

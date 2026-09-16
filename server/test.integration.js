@@ -874,6 +874,27 @@ const waitForServer = async () => {
         assert.strictEqual((await call("DELETE", `/api/leads/${abcId}`, { token: R })).status, 403, "members cannot delete");
         assert.strictEqual((await call("DELETE", `/api/leads/${abcId}`, { token: CH })).status, 403, "heads cannot delete");
 
+        const moved = await call("PUT", `/api/leads/${abcId}/stage`, { token: R, body: { stage: "Proposal", note: "quote sent" } });
+        assert.strictEqual(moved.body.lead.stage, "Proposal");
+        assert.strictEqual(moved.body.lead.closedAt, null, "an open stage leaves closedAt unset");
+        assert.ok(moved.body.lead.history.some((h) => /Proposal/.test(h.text) && /quote sent/.test(h.text)),
+            "the stage change and its note land in history");
+
+        const won = await call("PUT", `/api/leads/${abcId}/stage`, { token: R, body: { stage: "Won" } });
+        assert.ok(won.body.lead.closedAt, "Won stamps closedAt");
+
+        const reopened = await call("PUT", `/api/leads/${abcId}/stage`, { token: R, body: { stage: "Negotiation" } });
+        assert.strictEqual(reopened.body.lead.closedAt, null, "moving back off a closed stage clears closedAt");
+
+        const lost = await call("PUT", `/api/leads/${abcId}/stage`, { token: R, body: { stage: "Lost", lostReason: "price" } });
+        assert.strictEqual(lost.body.lead.lostReason, "price");
+        assert.ok(lost.body.lead.closedAt, "Lost stamps closedAt too");
+
+        assert.strictEqual((await call("PUT", `/api/leads/${abcId}/stage`, { token: R, body: { stage: "Nonsense" } })).status, 400,
+            "an unknown stage is rejected");
+        assert.strictEqual((await call("PUT", `/api/leads/${abcId}/stage`, { token: RV, body: { stage: "Won" } })).status, 404,
+            "another rep cannot move your lead");
+
         pass("Sales Pipeline", "lead create, owner rules, follow-up task invariant, WhatsApp alert");
 
         console.log("\n  FEATURE VERIFICATION\n  " + "=".repeat(74));
