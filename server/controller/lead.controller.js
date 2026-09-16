@@ -224,6 +224,75 @@ const updateLeadStage = async (req, res) => {
     }
 };
 
+const OUTCOMES = ["Interested", "Follow-up required", "Proposal requested", "Not interested", "Wrong number"];
+
+// Only the unambiguous outcomes move the stage. "Interested" and "Follow-up
+// required" say nothing about where the deal actually is, so they leave it be.
+const OUTCOME_STAGE = {
+    "Not interested": "Lost",
+    "Wrong number": "Lost",
+    "Proposal requested": "Proposal",
+};
+
+/** The stage a lead lands on after `outcome` is logged against it. Pure. */
+const stageForOutcome = (stage, outcome) => {
+    // Logging any touch at all means contact happened.
+    const base = stage === "New" ? "Contacted" : stage;
+    return OUTCOME_STAGE[outcome] || base;
+};
+
+const logOutcome = async (req, res) => {
+    try {
+        const { taskId, outcome, note, nextFollowUp, nextTitle } = req.body;
+
+        if (!OUTCOMES.includes(outcome)) {
+            return res.status(400).json({ message: `outcome must be one of: ${OUTCOMES.join(", ")}` });
+        }
+
+        const lead = await findScopedLead(req);
+        if (!lead) return res.status(404).json({ message: "Lead not found" });
+
+        let completedTask = null;
+        if (taskId) {
+            const task = await Task.findById(taskId);
+            // A task from a different lead would let one lead close another's work.
+            if (!task || String(task.lead) !== String(lead._id)) {
+                return res.status(400).json({ message: "Task does not belong to this lead" });
+            }
+            task.status = "Completed";
+            task.completedAt = new Date();
+            task.progress = 100;
+            (task.todoChecklist || []).forEach((item) => { item.completed = true; });
+            await task.save();
+            completedTask = task;
+        }
+
+        lead.stage = stageForOutcome(lead.stage, outcome);
+        lead.closedAt = CLOSED_STAGES.includes(lead.stage) ? new Date() : null;
+        // One line, whatever the stage path was: a New lead closed as "Not
+        // interested" passes through Contacted without logging it separately.
+        lead.history.push({ by: req.user._id, text: note ? `${outcome} — ${note}` : outcome });
+        await lead.save();
+
+        // A closed lead gets no successor - dead work does not belong in
+        // anyone's Today list. The response says so rather than staying silent.
+        let nextTask = null;
+        if (nextFollowUp && !CLOSED_STAGES.includes(lead.stage)) {
+            nextTask = await createFollowUp({ lead, actor: req.user, dueDate: nextFollowUp, title: nextTitle });
+        }
+
+        res.json({
+            message: "Outcome logged",
+            lead,
+            completedTask,
+            nextTask,
+            nextSkipped: Boolean(nextFollowUp && !nextTask),
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Server error", error: error.message });
+    }
+};
+
 const deleteLead = async (req, res) => {
     try {
         const lead = await Lead.findByIdAndDelete(req.params.id);
@@ -238,6 +307,7 @@ const deleteLead = async (req, res) => {
 };
 
 module.exports = {
-    createLead, listLeads, getLeadById, updateLead, updateLeadStage, deleteLead,
-    createFollowUp, findScopedLead, buildLeadFilters, CLOSED_STAGES,
+    createLead, listLeads, getLeadById, updateLead, updateLeadStage, logOutcome, deleteLead,
+    createFollowUp, findScopedLead, buildLeadFilters, stageForOutcome,
+    OUTCOMES, CLOSED_STAGES,
 };

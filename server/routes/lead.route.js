@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { protect, adminOnly } = require('../middleware/authMiddleware.js');
 const {
-    createLead, listLeads, getLeadById, updateLead, updateLeadStage, deleteLead,
+    createLead, listLeads, getLeadById, updateLead, updateLeadStage, logOutcome, deleteLead,
 } = require('../controller/lead.controller.js');
 
 router.get('/', protect, listLeads);
@@ -11,6 +11,7 @@ router.get('/', protect, listLeads);
 router.post('/', protect, createLead);
 
 router.put('/:id/stage', protect, updateLeadStage);
+router.post('/:id/outcome', protect, logOutcome);
 
 router.get('/:id', protect, getLeadById);
 router.put('/:id', protect, updateLead);

@@ -895,6 +895,40 @@ const waitForServer = async () => {
         assert.strictEqual((await call("PUT", `/api/leads/${abcId}/stage`, { token: RV, body: { stage: "Won" } })).status, 404,
             "another rep cannot move your lead");
 
+        // A fresh lead so the outcome path starts from New with a live task.
+        const fresh = await mkLead(R, { company: "PQR Pvt Ltd", product: "SD-WAN", value: 300000 });
+        const pqr = fresh.body.lead._id, pqrTask = fresh.body.task._id;
+
+        const logged = await call("POST", `/api/leads/${pqr}/outcome`, {
+            token: R,
+            body: { taskId: pqrTask, outcome: "Interested", note: "wants a demo", nextFollowUp: day(2), nextTitle: "Demo — PQR" },
+        });
+        assert.strictEqual(logged.status, 200, `outcome failed: ${logged.text}`);
+        assert.strictEqual(logged.body.lead.stage, "Contacted", "a touch on a New lead advances it to Contacted");
+        assert.strictEqual(logged.body.completedTask.status, "Completed", "the referenced task is closed out");
+        assert.ok(logged.body.nextTask, "the successor follow-up is created");
+        assert.strictEqual(logged.body.nextTask.title, "Demo — PQR");
+        assert.strictEqual(logged.body.nextSkipped, false);
+        assert.ok(logged.body.lead.history.some((h) => /wants a demo/.test(h.text)));
+
+        // A task belonging to a different lead must never be closeable from here.
+        assert.strictEqual((await call("POST", `/api/leads/${pqr}/outcome`, {
+            token: R, body: { taskId: created.body.task._id, outcome: "Interested" },
+        })).status, 400, "a task from another lead is rejected");
+
+        assert.strictEqual((await call("POST", `/api/leads/${pqr}/outcome`, {
+            token: R, body: { outcome: "Maybe" },
+        })).status, 400, "an unknown outcome is rejected");
+
+        // Closing the lead must suppress the successor rather than queue dead work.
+        const closed = await call("POST", `/api/leads/${pqr}/outcome`, {
+            token: R, body: { taskId: logged.body.nextTask._id, outcome: "Not interested", nextFollowUp: day(5) },
+        });
+        assert.strictEqual(closed.body.lead.stage, "Lost");
+        assert.ok(closed.body.lead.closedAt, "closing through an outcome stamps closedAt");
+        assert.strictEqual(closed.body.nextTask, null, "no follow-up is created on a closed lead");
+        assert.strictEqual(closed.body.nextSkipped, true, "and the response says it was skipped");
+
         pass("Sales Pipeline", "lead create, owner rules, follow-up task invariant, WhatsApp alert");
 
         console.log("\n  FEATURE VERIFICATION\n  " + "=".repeat(74));

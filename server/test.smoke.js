@@ -234,6 +234,24 @@ e@x.com,Eve,short
     assert.strictEqual(search.$or.length, 2, "search covers company and contactName");
 }
 
+// --- outcome to stage --------------------------------------------------------
+{
+    const { stageForOutcome, OUTCOMES } = require("./controller/lead.controller.js");
+
+    // Logging any touch means contact happened, so New always advances first.
+    assert.strictEqual(stageForOutcome("New", "Interested"), "Contacted");
+    assert.strictEqual(stageForOutcome("New", "Follow-up required"), "Contacted");
+
+    // The unambiguous outcomes drive the stage; the vague ones leave it alone.
+    assert.strictEqual(stageForOutcome("New", "Not interested"), "Lost");
+    assert.strictEqual(stageForOutcome("Qualified", "Wrong number"), "Lost");
+    assert.strictEqual(stageForOutcome("Qualified", "Proposal requested"), "Proposal");
+    assert.strictEqual(stageForOutcome("Negotiation", "Follow-up required"), "Negotiation",
+        "a vague outcome never drags a late-stage deal backwards");
+
+    assert.strictEqual(OUTCOMES.length, 5);
+}
+
 // --- scopeFor is field-agnostic, so leads can reuse it -----------------------
 // Async, so it runs last and owns the success line: printing "passed" before
 // awaiting these would report a green run for a failing assertion.
