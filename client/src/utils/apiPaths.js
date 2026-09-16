@@ -42,6 +42,16 @@ export const API_PATHS = {
         ADD_MEMBER: (id) => `/api/departments/${id}/members`,            // { userId }
         REMOVE_MEMBER: (id, userId) => `/api/departments/${id}/members/${userId}`,
     },
+    LEADS: {
+        GET_ALL: "/api/leads",                             // Scoped: member=own, head=department, admin=all
+        CREATE: "/api/leads",                              // Any signed-in user; owner defaults to self
+        GET_PIPELINE: "/api/leads/pipeline",               // Per-stage counts + value, scoped
+        GET_BY_ID: (id) => `/api/leads/${id}`,             // Lead + its tasks + history
+        UPDATE: (id) => `/api/leads/${id}`,                // Fields only - stage is ignored here
+        UPDATE_STAGE: (id) => `/api/leads/${id}/stage`,    // { stage, note, lostReason }
+        LOG_OUTCOME: (id) => `/api/leads/${id}/outcome`,   // { taskId, outcome, note, nextFollowUp, nextTitle }
+        DELETE: (id) => `/api/leads/${id}`,                // Admin only
+    },
     NOTIFICATIONS: {
         GET_ALL: "/api/notifications",
         STREAM: "/api/notifications/stream", // Server-Sent Events live feed
