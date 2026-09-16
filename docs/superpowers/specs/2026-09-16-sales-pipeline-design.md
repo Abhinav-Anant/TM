@@ -142,6 +142,24 @@ This is load-bearing in two ways:
    that already resolves. `notify()` filters out the actor, so a rep logging
    their own lead correctly receives no alert.
 
+### Closing and reopening keep the open work in step
+
+The invariant cuts both ways, and the second half was missed in the first draft
+of this spec — it surfaced only when the seeded dashboard showed three closed
+deals sitting in the Overdue panel.
+
+**Closing** a lead (`Won` or `Lost`, through either `/stage` or `/outcome`)
+completes every outstanding follow-up on it. Otherwise the task that was open
+when the deal closed nags its owner forever — the same dead work `/outcome`
+already refuses to create.
+
+**Reopening** a lead off `Won` or `Lost` creates a fresh follow-up, because a
+reopened lead with no live task is exactly the silence the invariant exists to
+prevent.
+
+Both directions live in one helper, `syncFollowUps`, called after every stage
+change.
+
 The first task is created with `dueDate` from an optional `firstFollowUp` in
 the request body, defaulting to 24 hours out; `assignedTo: [owner]`,
 `createdBy: req.user._id`, `category: "Sales"`, `lead: lead._id`, and title

@@ -41,6 +41,32 @@ const createFollowUp = async ({ lead, actor, dueDate, title }) => {
     return task;
 };
 
+/**
+ * Keeps a lead's open work in step with its stage, in both directions.
+ *
+ * Closing: a Won or Lost deal must stop nagging. Left alone, its outstanding
+ * follow-up sits in the owner's Overdue list forever - the same dead work
+ * logOutcome already refuses to create.
+ *
+ * Reopening: a lead coming back off Won or Lost has no live task, so it would
+ * go quiet. A fresh follow-up restores the invariant that an owned lead always
+ * has a next action.
+ */
+const syncFollowUps = async ({ lead, actor, wasClosed }) => {
+    const isClosed = CLOSED_STAGES.includes(lead.stage);
+
+    if (isClosed) {
+        await Task.updateMany(
+            { lead: lead._id, status: { $ne: "Completed" } },
+            { $set: { status: "Completed", completedAt: new Date(), progress: 100 } }
+        );
+        return null;
+    }
+
+    if (wasClosed) return createFollowUp({ lead, actor });
+    return null;
+};
+
 const createLead = async (req, res) => {
     try {
         const {
@@ -207,6 +233,7 @@ const updateLeadStage = async (req, res) => {
         if (!lead) return res.status(404).json({ message: "Lead not found" });
 
         const from = lead.stage;
+        const wasClosed = CLOSED_STAGES.includes(from);
         lead.stage = stage;
         // Any stage may move to any other: the pipeline is a label, not a state
         // machine. Reps skip Demo, and a deal legitimately comes back from Lost.
@@ -219,7 +246,9 @@ const updateLeadStage = async (req, res) => {
         });
 
         await lead.save();
-        res.json({ message: "Stage updated successfully", lead });
+        const nextTask = await syncFollowUps({ lead, actor: req.user, wasClosed });
+
+        res.json({ message: "Stage updated successfully", lead, nextTask });
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });
     }
@@ -332,12 +361,16 @@ const logOutcome = async (req, res) => {
             completedTask = task;
         }
 
+        const wasClosed = CLOSED_STAGES.includes(lead.stage);
         lead.stage = stageForOutcome(lead.stage, outcome);
         lead.closedAt = CLOSED_STAGES.includes(lead.stage) ? new Date() : null;
         // One line, whatever the stage path was: a New lead closed as "Not
         // interested" passes through Contacted without logging it separately.
         lead.history.push({ by: req.user._id, text: note ? `${outcome} — ${note}` : outcome });
         await lead.save();
+
+        // Closing here must also clear any follow-up the caller did not name.
+        await syncFollowUps({ lead, actor: req.user, wasClosed });
 
         // A closed lead gets no successor - dead work does not belong in
         // anyone's Today list. The response says so rather than staying silent.

@@ -883,8 +883,20 @@ const waitForServer = async () => {
         const won = await call("PUT", `/api/leads/${abcId}/stage`, { token: R, body: { stage: "Won" } });
         assert.ok(won.body.lead.closedAt, "Won stamps closedAt");
 
+        // A closed deal must stop nagging: its outstanding follow-up would sit in
+        // the owner's Overdue list forever otherwise.
+        const afterWon = await call("GET", `/api/leads/${abcId}`, { token: R });
+        assert.ok(afterWon.body.tasks.length > 0 && afterWon.body.tasks.every((t) => t.status === "Completed"),
+            "closing a lead completes its outstanding follow-ups");
+
         const reopened = await call("PUT", `/api/leads/${abcId}/stage`, { token: R, body: { stage: "Negotiation" } });
         assert.strictEqual(reopened.body.lead.closedAt, null, "moving back off a closed stage clears closedAt");
+
+        // ...and reopening restores the invariant that an owned lead always has
+        // a next action, or the lead goes quiet.
+        const afterReopen = await call("GET", `/api/leads/${abcId}`, { token: R });
+        assert.ok(afterReopen.body.tasks.some((t) => t.status !== "Completed"),
+            "reopening a closed lead gives it a fresh follow-up");
 
         const lost = await call("PUT", `/api/leads/${abcId}/stage`, { token: R, body: { stage: "Lost", lostReason: "price" } });
         assert.strictEqual(lost.body.lead.lostReason, "price");
@@ -928,6 +940,10 @@ const waitForServer = async () => {
         assert.ok(closed.body.lead.closedAt, "closing through an outcome stamps closedAt");
         assert.strictEqual(closed.body.nextTask, null, "no follow-up is created on a closed lead");
         assert.strictEqual(closed.body.nextSkipped, true, "and the response says it was skipped");
+
+        const afterClose = await call("GET", `/api/leads/${pqr}`, { token: R });
+        assert.ok(afterClose.body.tasks.every((t) => t.status === "Completed"),
+            "closing through an outcome also clears the lead's outstanding follow-ups");
 
         const repPipe = await call("GET", "/api/leads/pipeline", { token: R });
         assert.strictEqual(repPipe.status, 200, `pipeline failed: ${repPipe.text}`);
