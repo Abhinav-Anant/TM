@@ -766,6 +766,62 @@ const waitForServer = async () => {
         assert.strictEqual((await call("POST", "/api/users/import", { token: A })).status, 400, "import with no file");
         pass("CSV Member Import", `created ${importRes.body.created}, skipped ${importRes.body.skipped}, ${importRes.body.errors.length} row errors by line; admin-only`);
 
+        // ---------- SALES PIPELINE ----------
+        // Fresh actors: this block must not depend on departments earlier
+        // blocks create and delete.
+        const crm = (await call("POST", "/api/departments", { token: A, body: { name: "CRM" } })).body.department;
+        const crmHead = (await call("POST", "/api/auth/register", {
+            body: { name: "Hera Head", email: "crmhead@example.test", password: "pw123456", adminInviteToken: HEAD_TOKEN },
+        })).body;
+        const rep = (await call("POST", "/api/auth/register", {
+            body: { name: "Ravi Rep", email: "rep@example.test", password: "pw123456", phone: "98765 11111" },
+        })).body;
+        const rival = (await call("POST", "/api/auth/register", {
+            body: { name: "Rita Rival", email: "rival@example.test", password: "pw123456" },
+        })).body;
+        for (const u of [crmHead, rep, rival]) {
+            await call("POST", "/api/departments/" + crm._id + "/members", { token: A, body: { userId: u._id } });
+        }
+        const CH = crmHead.token, R = rep.token, RV = rival.token;
+
+        const mkLead = async (token, over = {}) => call("POST", "/api/leads", {
+            token,
+            body: { company: "ABC Industries", contactName: "Rajesh Sharma", phone: "98765 43210",
+                    product: "Firewall", source: "Website", value: 120000, ...over },
+        });
+
+        const created = await mkLead(R);
+        assert.strictEqual(created.status, 201, `lead create failed: ${created.text}`);
+        assert.strictEqual(created.body.lead.stage, "New", "a new lead starts in New");
+        assert.strictEqual(String(created.body.lead.owner), String(rep._id), "owner defaults to the caller");
+        assert.strictEqual(created.body.lead.phone, "919876543210", "phone is normalised on the way in");
+        assert.strictEqual(created.body.lead.history.length, 1, "creation is recorded in history");
+
+        // The invariant: an owned lead always has a next action.
+        assert.ok(created.body.task, "creating a lead creates its first follow-up task");
+        assert.strictEqual(String(created.body.task.lead), String(created.body.lead._id));
+        assert.strictEqual(created.body.task.category, "Sales");
+        assert.deepStrictEqual(created.body.task.assignedTo.map(String), [String(rep._id)]);
+
+        // That task is an ordinary task, so it shows up in the rep's normal list.
+        const repTasks = await call("GET", "/api/tasks", { token: R });
+        assert.ok(repTasks.body.tasks.some((t) => String(t._id) === String(created.body.task._id)),
+            "the follow-up is a first-class task in the existing list");
+
+        // A member cannot hand a lead to someone else; admin and head can.
+        assert.strictEqual((await mkLead(R, { owner: rival._id })).status, 403, "a member cannot assign a lead away");
+        assert.strictEqual((await mkLead(CH, { owner: rep._id })).status, 201, "a head assigns inside their department");
+        assert.strictEqual((await mkLead(A, { owner: rival._id })).status, 201, "an admin assigns to anyone");
+        assert.strictEqual((await call("POST", "/api/leads", { token: R, body: { contactName: "No Company" } })).status, 400,
+            "company is required");
+
+        // An assignment the rep did not make must reach them on WhatsApp.
+        await sleep(300);
+        assert.ok(wa.received.some((m) => m.to === "919876511111" && /ABC Industries/.test(m.text)),
+            "assigning a lead notifies the owner over the existing WhatsApp path");
+
+        pass("Sales Pipeline", "lead create, owner rules, follow-up task invariant, WhatsApp alert");
+
         console.log("\n  FEATURE VERIFICATION\n  " + "=".repeat(74));
         results.forEach((r) => console.log(`  [PASS] ${r.feature.padEnd(28)} ${r.detail}`));
         console.log("  " + "=".repeat(74));
