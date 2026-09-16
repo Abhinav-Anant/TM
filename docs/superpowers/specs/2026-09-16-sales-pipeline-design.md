@@ -242,10 +242,19 @@ not receive `owners[]`.
 `Negotiation`). "Won value" is the sum over `Won`. Neither is weighted by
 probability; there is no forecasting model in this scope.
 
+### Filters never widen scope
+
+Query filters and the scope filter are combined with `$and`, not merged into
+one object. A merge would let a `member` passing `?owner=<someone else>`
+overwrite their own scope key and read another rep's leads; the reverse fix —
+letting scope win outright — would stop a `head` narrowing to a single rep.
+`$and` is correct in both directions and is covered by tests from both ends.
+
 ### Search
 
 `q` matches `company` and `contactName` by case-insensitive regex, with the
-input escaped for regex metacharacters.
+input escaped for regex metacharacters. It reuses `escapeRegex`, already
+exported from `task.controller.js`, rather than defining a second copy.
 
 Known ceiling: a regex scan, correct and fast into the low tens of thousands of
 leads. Swap for a text index if the collection outgrows that.
