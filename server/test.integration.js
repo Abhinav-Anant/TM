@@ -845,6 +845,35 @@ const waitForServer = async () => {
         assert.strictEqual((await call("GET", "/api/leads?q=x.z", { token: R })).body.leads.length, 0,
             "regex metacharacters stay literal");
 
+        const abcId = created.body.lead._id;
+
+        const detail = await call("GET", `/api/leads/${abcId}`, { token: R });
+        assert.strictEqual(detail.status, 200);
+        assert.strictEqual(detail.body.lead.company, "ABC Industries");
+        assert.strictEqual(detail.body.tasks.length, 1, "the detail view carries the lead's tasks");
+
+        // A lead outside your scope is indistinguishable from one that is not there.
+        assert.strictEqual((await call("GET", `/api/leads/${abcId}`, { token: RV })).status, 404,
+            "another rep's lead reads as not found, not as forbidden");
+        assert.strictEqual((await call("PUT", `/api/leads/${abcId}`, { token: RV, body: { value: 1 } })).status, 404);
+        assert.strictEqual((await call("GET", `/api/leads/${abcId}`, { token: CH })).status, 200,
+            "the head of the department can read it");
+
+        const edited = await call("PUT", `/api/leads/${abcId}`, { token: R, body: { value: 150000, contactName: "R. Sharma" } });
+        assert.strictEqual(edited.body.lead.value, 150000);
+        assert.strictEqual(edited.body.lead.contactName, "R. Sharma");
+
+        // Stage never moves through the generic edit, so every stage change is
+        // guaranteed to leave a history line behind.
+        const sneaky = await call("PUT", `/api/leads/${abcId}`, { token: R, body: { stage: "Won" } });
+        assert.strictEqual(sneaky.body.lead.stage, "New", "PUT /:id ignores stage");
+
+        assert.strictEqual((await call("PUT", `/api/leads/${abcId}`, { token: R, body: { owner: rival._id } })).status, 403,
+            "a member cannot hand their lead to someone else");
+
+        assert.strictEqual((await call("DELETE", `/api/leads/${abcId}`, { token: R })).status, 403, "members cannot delete");
+        assert.strictEqual((await call("DELETE", `/api/leads/${abcId}`, { token: CH })).status, 403, "heads cannot delete");
+
         pass("Sales Pipeline", "lead create, owner rules, follow-up task invariant, WhatsApp alert");
 
         console.log("\n  FEATURE VERIFICATION\n  " + "=".repeat(74));

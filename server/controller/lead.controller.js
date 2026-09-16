@@ -130,4 +130,83 @@ const listLeads = async (req, res) => {
     }
 };
 
-module.exports = { createLead, listLeads, createFollowUp, buildLeadFilters, CLOSED_STAGES };
+/**
+ * The scope filter is the authorization check. A lead outside the caller's
+ * scope returns null and the route answers 404, so an out-of-scope lead is
+ * indistinguishable from a missing one.
+ */
+const findScopedLead = async (req) => {
+    const scope = await scopeFor(req.user, 'owner');
+    return Lead.findOne({ _id: req.params.id, ...scope });
+};
+
+const getLeadById = async (req, res) => {
+    try {
+        const lead = await Lead.findOne({ _id: req.params.id, ...await scopeFor(req.user, 'owner') })
+            .populate("owner", "name email")
+            .populate("history.by", "name");
+        if (!lead) return res.status(404).json({ message: "Lead not found" });
+
+        const tasks = await Task.find({ lead: lead._id })
+            .populate("assignedTo", "name email")
+            .sort({ dueDate: 1 })
+            .lean();
+
+        res.json({ lead, tasks });
+    } catch (error) {
+        res.status(500).json({ message: "Server error", error: error.message });
+    }
+};
+
+const updateLead = async (req, res) => {
+    try {
+        const lead = await findScopedLead(req);
+        if (!lead) return res.status(404).json({ message: "Lead not found" });
+
+        const { company, contactName, phone, email, source, product, value, owner } = req.body;
+
+        if (owner && String(owner) !== String(lead.owner)) {
+            if (req.user.role === "member") {
+                return res.status(403).json({ message: "You cannot reassign a lead" });
+            }
+            if (!await canAssignTo(req.user, [owner])) {
+                return res.status(403).json({ message: "You can only assign leads to members of your own department" });
+            }
+            lead.owner = owner;
+            lead.history.push({ by: req.user._id, text: `Reassigned by ${req.user.name}` });
+        }
+
+        if (company !== undefined) lead.company = String(company).trim();
+        if (contactName !== undefined) lead.contactName = contactName;
+        if (phone !== undefined) lead.phone = normalizePhone(phone);
+        if (email !== undefined) lead.email = email;
+        if (source !== undefined) lead.source = source;
+        if (product !== undefined) lead.product = product;
+        if (value !== undefined) lead.value = Number(value) || 0;
+        // `stage` is deliberately absent: it moves only through PUT /:id/stage,
+        // which is what guarantees every stage change appends history.
+
+        await lead.save();
+        res.json({ message: "Lead updated successfully", lead });
+    } catch (error) {
+        res.status(500).json({ message: "Server error", error: error.message });
+    }
+};
+
+const deleteLead = async (req, res) => {
+    try {
+        const lead = await Lead.findByIdAndDelete(req.params.id);
+        if (!lead) return res.status(404).json({ message: "Lead not found" });
+
+        // The follow-ups have no meaning without the lead they hang off.
+        await Task.deleteMany({ lead: lead._id });
+        res.json({ message: "Lead deleted successfully" });
+    } catch (error) {
+        res.status(500).json({ message: "Server error", error: error.message });
+    }
+};
+
+module.exports = {
+    createLead, listLeads, getLeadById, updateLead, deleteLead,
+    createFollowUp, findScopedLead, buildLeadFilters, CLOSED_STAGES,
+};
