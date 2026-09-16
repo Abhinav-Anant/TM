@@ -2,8 +2,12 @@ const express = require("express");
 const router = express.Router();
 const { protect, adminOnly } = require('../middleware/authMiddleware.js');
 const {
-    createLead, listLeads, getLeadById, updateLead, updateLeadStage, logOutcome, deleteLead,
+    listLeads, createLead, getPipeline, getLeadById,
+    updateLead, updateLeadStage, logOutcome, deleteLead,
 } = require('../controller/lead.controller.js');
+
+// Static paths must stay above '/:id' or Express matches them as a lead id.
+router.get('/pipeline', protect, getPipeline);
 
 router.get('/', protect, listLeads);
 // Anyone signed in may log a lead - a rep who takes a call must be able to

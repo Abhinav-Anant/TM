@@ -929,7 +929,33 @@ const waitForServer = async () => {
         assert.strictEqual(closed.body.nextTask, null, "no follow-up is created on a closed lead");
         assert.strictEqual(closed.body.nextSkipped, true, "and the response says it was skipped");
 
-        pass("Sales Pipeline", "lead create, owner rules, follow-up task invariant, WhatsApp alert");
+        const repPipe = await call("GET", "/api/leads/pipeline", { token: R });
+        assert.strictEqual(repPipe.status, 200, `pipeline failed: ${repPipe.text}`);
+        assert.strictEqual(repPipe.body.stages.length, 8, "every stage comes back, including the empty ones");
+        assert.deepStrictEqual(
+            repPipe.body.stages.map((s) => s.stage),
+            ["New", "Contacted", "Qualified", "Demo", "Proposal", "Negotiation", "Won", "Lost"],
+            "stages arrive in pipeline order so the funnel does not reshuffle"
+        );
+        assert.ok(repPipe.body.stages.some((s) => s.stage === "Lost" && s.count === 2),
+            "both closed leads land in Lost");
+        assert.strictEqual(repPipe.body.owners, undefined, "a member gets no per-rep breakdown");
+
+        // Closed value is excluded from pipeline value.
+        const openStages = repPipe.body.stages.filter((s) => !["Won", "Lost"].includes(s.stage));
+        assert.strictEqual(
+            repPipe.body.totals.pipelineValue,
+            openStages.reduce((n, s) => n + s.value, 0),
+            "pipeline value sums the open stages only"
+        );
+
+        const headPipe = await call("GET", "/api/leads/pipeline", { token: CH });
+        assert.ok(Array.isArray(headPipe.body.owners), "a head gets the per-rep table");
+        const repRow = headPipe.body.owners.find((o) => String(o.owner?._id) === String(rep._id));
+        assert.ok(repRow && repRow.owner.name === "Ravi Rep", "rows carry the rep's name, not a bare id");
+        assert.ok(headPipe.body.totals.leads >= repPipe.body.totals.leads, "the head's totals cover the department");
+
+        pass("Sales Pipeline", `${headPipe.body.totals.leads} leads: scope isolation, follow-up invariant, stage history, outcomes, funnel`);
 
         console.log("\n  FEATURE VERIFICATION\n  " + "=".repeat(74));
         results.forEach((r) => console.log(`  [PASS] ${r.feature.padEnd(28)} ${r.detail}`));

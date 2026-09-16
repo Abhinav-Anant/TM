@@ -4,6 +4,7 @@ const { scopeFor, canAssignTo } = require('../utils/scope.js');
 const { normalizePhone } = require('../utils/phone.js');
 const { notify } = require('../utils/notify.js');
 const { escapeRegex } = require('./task.controller.js');
+const User = require('../model/user.model.js');
 
 const CLOSED_STAGES = ['Won', 'Lost'];
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -224,6 +225,70 @@ const updateLeadStage = async (req, res) => {
     }
 };
 
+const getPipeline = async (req, res) => {
+    try {
+        const scope = await scopeFor(req.user, 'owner');
+        const stageNames = Lead.schema.path('stage').enumValues;
+        const openStages = stageNames.filter((s) => !CLOSED_STAGES.includes(s));
+
+        const grouped = await Lead.aggregate([
+            { $match: scope },
+            { $group: { _id: "$stage", count: { $sum: 1 }, value: { $sum: "$value" } } },
+        ]);
+        const byStage = Object.fromEntries(grouped.map((g) => [g._id, g]));
+
+        // Every stage, always, in pipeline order - a funnel that drops its empty
+        // columns reshuffles itself as data changes and is unreadable.
+        const stages = stageNames.map((stage) => ({
+            stage,
+            count: byStage[stage]?.count || 0,
+            value: byStage[stage]?.value || 0,
+        }));
+
+        const totals = {
+            leads: stages.reduce((n, s) => n + s.count, 0),
+            pipelineValue: stages
+                .filter((s) => openStages.includes(s.stage))
+                .reduce((n, s) => n + s.value, 0),
+            wonValue: byStage.Won?.value || 0,
+            wonCount: byStage.Won?.count || 0,
+        };
+
+        const payload = { stages, totals };
+
+        // The management table. A member has nobody to compare against.
+        if (req.user.role !== "member") {
+            const perOwner = await Lead.aggregate([
+                { $match: scope },
+                {
+                    $group: {
+                        _id: "$owner",
+                        leads: { $sum: 1 },
+                        pipelineValue: { $sum: { $cond: [{ $in: ["$stage", openStages] }, "$value", 0] } },
+                        wonValue: { $sum: { $cond: [{ $eq: ["$stage", "Won"] }, "$value", 0] } },
+                    },
+                },
+                { $sort: { pipelineValue: -1 } },
+            ]);
+
+            const owners = await User.find({ _id: { $in: perOwner.map((o) => o._id) } })
+                .select("name email").lean();
+            const byId = Object.fromEntries(owners.map((u) => [String(u._id), u]));
+
+            payload.owners = perOwner.map((o) => ({
+                owner: byId[String(o._id)] || null,
+                leads: o.leads,
+                pipelineValue: o.pipelineValue,
+                wonValue: o.wonValue,
+            }));
+        }
+
+        res.json(payload);
+    } catch (error) {
+        res.status(500).json({ message: "Server error", error: error.message });
+    }
+};
+
 const OUTCOMES = ["Interested", "Follow-up required", "Proposal requested", "Not interested", "Wrong number"];
 
 // Only the unambiguous outcomes move the stage. "Interested" and "Follow-up
@@ -307,7 +372,7 @@ const deleteLead = async (req, res) => {
 };
 
 module.exports = {
-    createLead, listLeads, getLeadById, updateLead, updateLeadStage, logOutcome, deleteLead,
+    createLead, listLeads, getPipeline, getLeadById, updateLead, updateLeadStage, logOutcome, deleteLead,
     createFollowUp, findScopedLead, buildLeadFilters, stageForOutcome,
     OUTCOMES, CLOSED_STAGES,
 };
