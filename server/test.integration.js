@@ -766,6 +766,213 @@ const waitForServer = async () => {
         assert.strictEqual((await call("POST", "/api/users/import", { token: A })).status, 400, "import with no file");
         pass("CSV Member Import", `created ${importRes.body.created}, skipped ${importRes.body.skipped}, ${importRes.body.errors.length} row errors by line; admin-only`);
 
+        // ---------- SALES PIPELINE ----------
+        // Fresh actors: this block must not depend on departments earlier
+        // blocks create and delete.
+        const crm = (await call("POST", "/api/departments", { token: A, body: { name: "CRM" } })).body.department;
+        const crmHead = (await call("POST", "/api/auth/register", {
+            body: { name: "Hera Head", email: "crmhead@example.test", password: "pw123456", adminInviteToken: HEAD_TOKEN },
+        })).body;
+        const rep = (await call("POST", "/api/auth/register", {
+            body: { name: "Ravi Rep", email: "rep@example.test", password: "pw123456", phone: "98765 11111" },
+        })).body;
+        const rival = (await call("POST", "/api/auth/register", {
+            body: { name: "Rita Rival", email: "rival@example.test", password: "pw123456" },
+        })).body;
+        for (const u of [crmHead, rep, rival]) {
+            await call("POST", "/api/departments/" + crm._id + "/members", { token: A, body: { userId: u._id } });
+        }
+        const CH = crmHead.token, R = rep.token, RV = rival.token;
+
+        const mkLead = async (token, over = {}) => call("POST", "/api/leads", {
+            token,
+            body: { company: "ABC Industries", contactName: "Rajesh Sharma", phone: "98765 43210",
+                    product: "Firewall", source: "Website", value: 120000, ...over },
+        });
+
+        const created = await mkLead(R);
+        assert.strictEqual(created.status, 201, `lead create failed: ${created.text}`);
+        assert.strictEqual(created.body.lead.stage, "New", "a new lead starts in New");
+        assert.strictEqual(String(created.body.lead.owner), String(rep._id), "owner defaults to the caller");
+        assert.strictEqual(created.body.lead.phone, "919876543210", "phone is normalised on the way in");
+        assert.strictEqual(created.body.lead.history.length, 1, "creation is recorded in history");
+
+        // The invariant: an owned lead always has a next action.
+        assert.ok(created.body.task, "creating a lead creates its first follow-up task");
+        assert.strictEqual(String(created.body.task.lead), String(created.body.lead._id));
+        assert.strictEqual(created.body.task.category, "Sales");
+        assert.deepStrictEqual(created.body.task.assignedTo.map(String), [String(rep._id)]);
+
+        // That task is an ordinary task, so it shows up in the rep's normal list.
+        const repTasks = await call("GET", "/api/tasks", { token: R });
+        assert.ok(repTasks.body.tasks.some((t) => String(t._id) === String(created.body.task._id)),
+            "the follow-up is a first-class task in the existing list");
+
+        // A member cannot hand a lead to someone else; admin and head can.
+        assert.strictEqual((await mkLead(R, { owner: rival._id })).status, 403, "a member cannot assign a lead away");
+        assert.strictEqual((await mkLead(CH, { owner: rep._id })).status, 201, "a head assigns inside their department");
+        assert.strictEqual((await mkLead(A, { owner: rival._id })).status, 201, "an admin assigns to anyone");
+        assert.strictEqual((await call("POST", "/api/leads", { token: R, body: { contactName: "No Company" } })).status, 400,
+            "company is required");
+
+        // An assignment the rep did not make must reach them on WhatsApp.
+        await sleep(300);
+        assert.ok(wa.received.some((m) => m.to === "919876511111" && /ABC Industries/.test(m.text)),
+            "assigning a lead notifies the owner over the existing WhatsApp path");
+
+        // Scope: a rep sees only their own leads, a head sees the department,
+        // an admin sees everything.
+        const repList = await call("GET", "/api/leads", { token: R });
+        assert.ok(repList.body.leads.every((l) => String(l.owner._id) === String(rep._id)),
+            "a member sees only leads they own");
+        assert.strictEqual(repList.body.leads.length, 2, "the rep owns their own lead plus the one the head assigned");
+
+        const headList = await call("GET", "/api/leads", { token: CH });
+        assert.strictEqual(headList.body.leads.length, 3, "a head sees the whole department");
+
+        // The escalation attempt: a query parameter must not widen scope.
+        const widened = await call("GET", "/api/leads?owner=" + rival._id, { token: R });
+        assert.strictEqual(widened.body.leads.length, 0, "?owner= cannot widen a member's scope");
+
+        // A head narrowing to one rep still works.
+        const narrowed = await call("GET", "/api/leads?owner=" + rep._id, { token: CH });
+        assert.strictEqual(narrowed.body.leads.length, 2, "a head may filter down to one rep");
+
+        await mkLead(R, { company: "XYZ Hotel", product: "CCTV", source: "Referral", value: 45000 });
+        assert.strictEqual((await call("GET", "/api/leads?product=CCTV", { token: R })).body.leads.length, 1);
+        assert.strictEqual((await call("GET", "/api/leads?q=hotel", { token: R })).body.leads.length, 1,
+            "search is case-insensitive");
+        assert.strictEqual((await call("GET", "/api/leads?q=x.z", { token: R })).body.leads.length, 0,
+            "regex metacharacters stay literal");
+
+        const abcId = created.body.lead._id;
+
+        const detail = await call("GET", `/api/leads/${abcId}`, { token: R });
+        assert.strictEqual(detail.status, 200);
+        assert.strictEqual(detail.body.lead.company, "ABC Industries");
+        assert.strictEqual(detail.body.tasks.length, 1, "the detail view carries the lead's tasks");
+
+        // A lead outside your scope is indistinguishable from one that is not there.
+        assert.strictEqual((await call("GET", `/api/leads/${abcId}`, { token: RV })).status, 404,
+            "another rep's lead reads as not found, not as forbidden");
+        assert.strictEqual((await call("PUT", `/api/leads/${abcId}`, { token: RV, body: { value: 1 } })).status, 404);
+        assert.strictEqual((await call("GET", `/api/leads/${abcId}`, { token: CH })).status, 200,
+            "the head of the department can read it");
+
+        const edited = await call("PUT", `/api/leads/${abcId}`, { token: R, body: { value: 150000, contactName: "R. Sharma" } });
+        assert.strictEqual(edited.body.lead.value, 150000);
+        assert.strictEqual(edited.body.lead.contactName, "R. Sharma");
+
+        // Stage never moves through the generic edit, so every stage change is
+        // guaranteed to leave a history line behind.
+        const sneaky = await call("PUT", `/api/leads/${abcId}`, { token: R, body: { stage: "Won" } });
+        assert.strictEqual(sneaky.body.lead.stage, "New", "PUT /:id ignores stage");
+
+        assert.strictEqual((await call("PUT", `/api/leads/${abcId}`, { token: R, body: { owner: rival._id } })).status, 403,
+            "a member cannot hand their lead to someone else");
+
+        assert.strictEqual((await call("DELETE", `/api/leads/${abcId}`, { token: R })).status, 403, "members cannot delete");
+        assert.strictEqual((await call("DELETE", `/api/leads/${abcId}`, { token: CH })).status, 403, "heads cannot delete");
+
+        const moved = await call("PUT", `/api/leads/${abcId}/stage`, { token: R, body: { stage: "Proposal", note: "quote sent" } });
+        assert.strictEqual(moved.body.lead.stage, "Proposal");
+        assert.strictEqual(moved.body.lead.closedAt, null, "an open stage leaves closedAt unset");
+        assert.ok(moved.body.lead.history.some((h) => /Proposal/.test(h.text) && /quote sent/.test(h.text)),
+            "the stage change and its note land in history");
+
+        const won = await call("PUT", `/api/leads/${abcId}/stage`, { token: R, body: { stage: "Won" } });
+        assert.ok(won.body.lead.closedAt, "Won stamps closedAt");
+
+        // A closed deal must stop nagging: its outstanding follow-up would sit in
+        // the owner's Overdue list forever otherwise.
+        const afterWon = await call("GET", `/api/leads/${abcId}`, { token: R });
+        assert.ok(afterWon.body.tasks.length > 0 && afterWon.body.tasks.every((t) => t.status === "Completed"),
+            "closing a lead completes its outstanding follow-ups");
+
+        const reopened = await call("PUT", `/api/leads/${abcId}/stage`, { token: R, body: { stage: "Negotiation" } });
+        assert.strictEqual(reopened.body.lead.closedAt, null, "moving back off a closed stage clears closedAt");
+
+        // ...and reopening restores the invariant that an owned lead always has
+        // a next action, or the lead goes quiet.
+        const afterReopen = await call("GET", `/api/leads/${abcId}`, { token: R });
+        assert.ok(afterReopen.body.tasks.some((t) => t.status !== "Completed"),
+            "reopening a closed lead gives it a fresh follow-up");
+
+        const lost = await call("PUT", `/api/leads/${abcId}/stage`, { token: R, body: { stage: "Lost", lostReason: "price" } });
+        assert.strictEqual(lost.body.lead.lostReason, "price");
+        assert.ok(lost.body.lead.closedAt, "Lost stamps closedAt too");
+
+        assert.strictEqual((await call("PUT", `/api/leads/${abcId}/stage`, { token: R, body: { stage: "Nonsense" } })).status, 400,
+            "an unknown stage is rejected");
+        assert.strictEqual((await call("PUT", `/api/leads/${abcId}/stage`, { token: RV, body: { stage: "Won" } })).status, 404,
+            "another rep cannot move your lead");
+
+        // A fresh lead so the outcome path starts from New with a live task.
+        const fresh = await mkLead(R, { company: "PQR Pvt Ltd", product: "SD-WAN", value: 300000 });
+        const pqr = fresh.body.lead._id, pqrTask = fresh.body.task._id;
+
+        const logged = await call("POST", `/api/leads/${pqr}/outcome`, {
+            token: R,
+            body: { taskId: pqrTask, outcome: "Interested", note: "wants a demo", nextFollowUp: day(2), nextTitle: "Demo — PQR" },
+        });
+        assert.strictEqual(logged.status, 200, `outcome failed: ${logged.text}`);
+        assert.strictEqual(logged.body.lead.stage, "Contacted", "a touch on a New lead advances it to Contacted");
+        assert.strictEqual(logged.body.completedTask.status, "Completed", "the referenced task is closed out");
+        assert.ok(logged.body.nextTask, "the successor follow-up is created");
+        assert.strictEqual(logged.body.nextTask.title, "Demo — PQR");
+        assert.strictEqual(logged.body.nextSkipped, false);
+        assert.ok(logged.body.lead.history.some((h) => /wants a demo/.test(h.text)));
+
+        // A task belonging to a different lead must never be closeable from here.
+        assert.strictEqual((await call("POST", `/api/leads/${pqr}/outcome`, {
+            token: R, body: { taskId: created.body.task._id, outcome: "Interested" },
+        })).status, 400, "a task from another lead is rejected");
+
+        assert.strictEqual((await call("POST", `/api/leads/${pqr}/outcome`, {
+            token: R, body: { outcome: "Maybe" },
+        })).status, 400, "an unknown outcome is rejected");
+
+        // Closing the lead must suppress the successor rather than queue dead work.
+        const closed = await call("POST", `/api/leads/${pqr}/outcome`, {
+            token: R, body: { taskId: logged.body.nextTask._id, outcome: "Not interested", nextFollowUp: day(5) },
+        });
+        assert.strictEqual(closed.body.lead.stage, "Lost");
+        assert.ok(closed.body.lead.closedAt, "closing through an outcome stamps closedAt");
+        assert.strictEqual(closed.body.nextTask, null, "no follow-up is created on a closed lead");
+        assert.strictEqual(closed.body.nextSkipped, true, "and the response says it was skipped");
+
+        const afterClose = await call("GET", `/api/leads/${pqr}`, { token: R });
+        assert.ok(afterClose.body.tasks.every((t) => t.status === "Completed"),
+            "closing through an outcome also clears the lead's outstanding follow-ups");
+
+        const repPipe = await call("GET", "/api/leads/pipeline", { token: R });
+        assert.strictEqual(repPipe.status, 200, `pipeline failed: ${repPipe.text}`);
+        assert.strictEqual(repPipe.body.stages.length, 8, "every stage comes back, including the empty ones");
+        assert.deepStrictEqual(
+            repPipe.body.stages.map((s) => s.stage),
+            ["New", "Contacted", "Qualified", "Demo", "Proposal", "Negotiation", "Won", "Lost"],
+            "stages arrive in pipeline order so the funnel does not reshuffle"
+        );
+        assert.ok(repPipe.body.stages.some((s) => s.stage === "Lost" && s.count === 2),
+            "both closed leads land in Lost");
+        assert.strictEqual(repPipe.body.owners, undefined, "a member gets no per-rep breakdown");
+
+        // Closed value is excluded from pipeline value.
+        const openStages = repPipe.body.stages.filter((s) => !["Won", "Lost"].includes(s.stage));
+        assert.strictEqual(
+            repPipe.body.totals.pipelineValue,
+            openStages.reduce((n, s) => n + s.value, 0),
+            "pipeline value sums the open stages only"
+        );
+
+        const headPipe = await call("GET", "/api/leads/pipeline", { token: CH });
+        assert.ok(Array.isArray(headPipe.body.owners), "a head gets the per-rep table");
+        const repRow = headPipe.body.owners.find((o) => String(o.owner?._id) === String(rep._id));
+        assert.ok(repRow && repRow.owner.name === "Ravi Rep", "rows carry the rep's name, not a bare id");
+        assert.ok(headPipe.body.totals.leads >= repPipe.body.totals.leads, "the head's totals cover the department");
+
+        pass("Sales Pipeline", `${headPipe.body.totals.leads} leads: scope isolation, follow-up invariant, stage history, outcomes, funnel`);
+
         console.log("\n  FEATURE VERIFICATION\n  " + "=".repeat(74));
         results.forEach((r) => console.log(`  [PASS] ${r.feature.padEnd(28)} ${r.detail}`));
         console.log("  " + "=".repeat(74));

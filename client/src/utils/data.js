@@ -1,6 +1,7 @@
 import {
   LuLayoutDashboard, LuClipboardCheck, LuSquarePlus, LuLogOut, LuUsers,
   LuCalendarDays, LuChartColumnBig, LuBuilding2, LuSmartphone,
+  LuTrendingUp, LuContact,
 } from 'react-icons/lu';
 
 export const SIDE_MENU_DATA = [
@@ -33,6 +34,18 @@ export const SIDE_MENU_DATA = [
     label: "Analytics",
     icon: LuChartColumnBig,
     path: "/analytics",
+  },
+  {
+    id: "06a",
+    label: "Sales",
+    icon: LuTrendingUp,
+    path: "/sales",
+  },
+  {
+    id: "06b",
+    label: "Leads",
+    icon: LuContact,
+    path: "/sales/leads",
   },
   {
     id: "06",
@@ -68,6 +81,8 @@ export const SIDE_MENU_HEAD_DATA = [
   { id: "03", label: "Create Task", icon: LuSquarePlus, path: "/head/create-task" },
   { id: "04", label: "Calendar", icon: LuCalendarDays, path: "/calendar" },
   { id: "05", label: "Analytics", icon: LuChartColumnBig, path: "/analytics" },
+  { id: "05a", label: "Sales", icon: LuTrendingUp, path: "/sales" },
+  { id: "05b", label: "Leads", icon: LuContact, path: "/sales/leads" },
   { id: "06", label: "My Department", icon: LuUsers, path: "/head/users" },
   { id: "07", label: "My Profile", icon: LuSmartphone, path: "/profile" },
   { id: "08", label: "Log Out", icon: LuLogOut, path: "logout" },
@@ -97,6 +112,18 @@ export const SIDE_MENU_USER_DATA = [
     label: "Analytics",
     icon: LuChartColumnBig,
     path: "/analytics",
+  },
+  {
+    id: "04a",
+    label: "Sales",
+    icon: LuTrendingUp,
+    path: "/sales",
+  },
+  {
+    id: "04b",
+    label: "Leads",
+    icon: LuContact,
+    path: "/sales/leads",
   },
   {
     id: "05",

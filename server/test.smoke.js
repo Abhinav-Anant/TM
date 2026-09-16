@@ -201,4 +201,76 @@ e@x.com,Eve,short
     assert.strictEqual(without.rows[0].department, "", "missing column is no department, not an error");
 }
 
-console.log("All smoke checks passed.");
+// --- lead filters ------------------------------------------------------------
+{
+    const { buildLeadFilters } = require("./controller/lead.controller.js");
+
+    assert.deepStrictEqual(buildLeadFilters({}, {}), {}, "admin, no filters, matches everything");
+    assert.deepStrictEqual(
+        buildLeadFilters({}, { stage: "Proposal", product: "Firewall" }),
+        { stage: "Proposal", product: "Firewall" },
+        "filters pass straight through for an admin"
+    );
+    assert.strictEqual(buildLeadFilters({}, { stage: "All" }).stage, undefined, "'All' is the UI's no-filter sentinel");
+
+    // The security property: a query parameter must never widen the scope. A
+    // member passing ?owner=<someone else> still only matches their own leads.
+    assert.deepStrictEqual(
+        buildLeadFilters({ owner: "me" }, { owner: "someone-else" }),
+        { $and: [{ owner: "someone-else" }, { owner: "me" }] },
+        "scope is ANDed with the query, never overwritten by it"
+    );
+
+    // A head filtering by one rep still narrows rather than replacing their scope.
+    assert.deepStrictEqual(
+        buildLeadFilters({ owner: { $in: ["r1", "r2"] } }, { owner: "r1" }),
+        { $and: [{ owner: "r1" }, { owner: { $in: ["r1", "r2"] } }] }
+    );
+
+    // Regex metacharacters in the search box stay literal.
+    const search = buildLeadFilters({}, { q: "a.b" });
+    assert.ok(search.$or[0].company instanceof RegExp);
+    assert.strictEqual(search.$or[0].company.source, "a\\.b", "metacharacters are escaped");
+    assert.strictEqual(search.$or.length, 2, "search covers company and contactName");
+}
+
+// --- outcome to stage --------------------------------------------------------
+{
+    const { stageForOutcome, OUTCOMES } = require("./controller/lead.controller.js");
+
+    // Logging any touch means contact happened, so New always advances first.
+    assert.strictEqual(stageForOutcome("New", "Interested"), "Contacted");
+    assert.strictEqual(stageForOutcome("New", "Follow-up required"), "Contacted");
+
+    // The unambiguous outcomes drive the stage; the vague ones leave it alone.
+    assert.strictEqual(stageForOutcome("New", "Not interested"), "Lost");
+    assert.strictEqual(stageForOutcome("Qualified", "Wrong number"), "Lost");
+    assert.strictEqual(stageForOutcome("Qualified", "Proposal requested"), "Proposal");
+    assert.strictEqual(stageForOutcome("Negotiation", "Follow-up required"), "Negotiation",
+        "a vague outcome never drags a late-stage deal backwards");
+
+    assert.strictEqual(OUTCOMES.length, 5);
+}
+
+// --- scopeFor is field-agnostic, so leads can reuse it -----------------------
+// Async, so it runs last and owns the success line: printing "passed" before
+// awaiting these would report a green run for a failing assertion.
+(async () => {
+    const { scopeFor } = require("./utils/scope.js");
+
+    // The admin and member branches never touch the database, so they belong
+    // here; the head branch needs User lookups and is covered by the e2e suite.
+    assert.deepStrictEqual(await scopeFor({ role: "admin" }, "owner"), {}, "admin sees every lead");
+    assert.deepStrictEqual(
+        await scopeFor({ role: "member", _id: "u1" }, "owner"),
+        { owner: "u1" },
+        "member is scoped to leads they own"
+    );
+    assert.deepStrictEqual(
+        await scopeFor({ role: "member", _id: "u1" }),
+        { assignedTo: "u1" },
+        "the default field is still assignedTo"
+    );
+
+    console.log("All smoke checks passed.");
+})();
