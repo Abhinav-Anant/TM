@@ -201,4 +201,25 @@ e@x.com,Eve,short
     assert.strictEqual(without.rows[0].department, "", "missing column is no department, not an error");
 }
 
-console.log("All smoke checks passed.");
+// --- scopeFor is field-agnostic, so leads can reuse it -----------------------
+// Async, so it runs last and owns the success line: printing "passed" before
+// awaiting these would report a green run for a failing assertion.
+(async () => {
+    const { scopeFor } = require("./utils/scope.js");
+
+    // The admin and member branches never touch the database, so they belong
+    // here; the head branch needs User lookups and is covered by the e2e suite.
+    assert.deepStrictEqual(await scopeFor({ role: "admin" }, "owner"), {}, "admin sees every lead");
+    assert.deepStrictEqual(
+        await scopeFor({ role: "member", _id: "u1" }, "owner"),
+        { owner: "u1" },
+        "member is scoped to leads they own"
+    );
+    assert.deepStrictEqual(
+        await scopeFor({ role: "member", _id: "u1" }),
+        { assignedTo: "u1" },
+        "the default field is still assignedTo"
+    );
+
+    console.log("All smoke checks passed.");
+})();

@@ -16,13 +16,19 @@ const departmentMemberIds = async (departmentId) => {
     return members.map((member) => member._id);
 };
 
-/** Mongo filter narrowing a task query to what `user` is allowed to see. */
-const scopeFor = async (user) => {
+/**
+ * Mongo filter narrowing a query to what `user` is allowed to see.
+ *
+ * `field` is the ownership field on the collection being queried - tasks use
+ * `assignedTo` (an array), leads use `owner` (a single id). The `$in` branch is
+ * correct against both.
+ */
+const scopeFor = async (user, field = 'assignedTo') => {
     if (user.role === "admin") return {};
     if (user.role === "head") {
-        return { assignedTo: { $in: await departmentMemberIds(user.department) } };
+        return { [field]: { $in: await departmentMemberIds(user.department) } };
     }
-    return { assignedTo: user._id };
+    return { [field]: user._id };
 };
 
 /** May `user` open / comment on / update this task? */

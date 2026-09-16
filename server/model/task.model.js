@@ -35,7 +35,10 @@ const taskSchema = new mongoose.Schema({
     comments: [commentSchema],
     progress: { type: Number, default: 0 }, 
     completedAt: { type: Date, default: null },
-}, 
+    // Set when this task is a sales follow-up. The only link between the task
+    // system and the pipeline - they share a database, so there is nothing to sync.
+    lead: { type: mongoose.Schema.Types.ObjectId, ref: "Lead", default: null, index: true },
+},
 {
     timestamps: true 
 });
