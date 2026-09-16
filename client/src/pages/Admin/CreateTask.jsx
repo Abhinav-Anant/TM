@@ -69,11 +69,11 @@ const CreateTask = () => {
         todoChecklist: todolist,
       });
 
-      toast.success("Task Created Successfully");
+      toast.success("Task created");
       clearData();
       navigate(`${basePathFor(user)}/tasks`);
     } catch (error) {
-      setError("Something went wrong. Please try again.");
+      setError("That did not save. Check your connection and try again.");
       console.error("Error creating task:", error);
     } finally {
       setLoading(false);
@@ -98,9 +98,9 @@ const CreateTask = () => {
         todoChecklist: todolist,
       });
 
-      toast.success("Task Updated Successfully");
+      toast.success("Changes saved");
     } catch (error) {
-      setError("Something went wrong. Please try again.");
+      setError("That did not save. Check your connection and try again.");
       console.error("Error updating task:", error);
     } finally {
       setLoading(false);
@@ -111,23 +111,23 @@ const CreateTask = () => {
     setError(null);
 
     if (!taskData.title.trim()) {
-      setError("Title is required.");
+      setError("Give the task a title.");
       return;
     }
     if (!taskData.description.trim()) {
-      setError("Description is required.");
+      setError("Add a description so it is clear what to do.");
       return;
     }
     if (!taskData.dueDate?.trim()) {
-      setError("Due Date is required.");
+      setError("Pick a due date.");
       return;
     }
     if (taskData.assignedTo?.length === 0) {
-      setError("Task is not assigned to any member.");
+      setError("Assign this task to at least one person.");
       return;
     }
     if (taskData.todoChecklist?.length === 0) {
-      setError("Add at least one todo task.");
+      setError("Add at least one checklist item.");
       return;
     }
 
@@ -152,7 +152,7 @@ const CreateTask = () => {
         });
       }
     } catch (error) {
-      setError("Error fetching task details.");
+      setError("Could not load this task.");
       console.error("Error fetching task:", error);
     } finally {
       setLoading(false);
@@ -164,10 +164,10 @@ const CreateTask = () => {
     try {
       await axiosInstance.delete(API_PATHS.TASKS.DELETE_TASK(taskId));
       setOpenDeleteAlert(false);
-      toast.success("Task deleted successfully");
+      toast.success("Task deleted");
       navigate(`${basePathFor(user)}/tasks`);
     } catch (error) {
-      toast.error("Failed to delete task");
+      toast.error("Could not delete the task. Try again.");
       console.error("Error deleting task:", error.response?.data?.message || error.message);
     } finally {
       setLoading(false);
@@ -182,117 +182,129 @@ const CreateTask = () => {
 
   return (
     <DashboardLayout activeMenu="Create Task">
-      <div className="mt-8 max-w-5xl mx-auto bg-white rounded-lg shadow p-6">
-        <div className="flex items-center justify-between border-b pb-4 mb-6">
-          <h2 className="text-2xl font-semibold text-gray-800">
-            {taskId ? "Update Task" : "Create Task"}
-          </h2>
-          {taskId && (
-            <button
-              className="flex items-center gap-1 text-sm font-medium text-red-600 border border-red-100 bg-red-50 px-3 py-1.5 rounded-md hover:bg-red-100 hover:border-red-300 transition-all disabled:opacity-50"
-              onClick={() => setOpenDeleteAlert(true)}
-              disabled={loading}
-            >
-              <LuTrash2 className="text-base" />
-              {loading ? "Deleting..." : "Delete"}
-            </button>
-          )}
-        </div>
-
-        <div className="space-y-6">
-          <div>
-            <label className="text-sm font-medium text-gray-700">Task Title</label>
-            <input
-              className="form-input w-full mt-1 rounded-md border-gray-300 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Create App UI"
-              value={taskData.title}
-              onChange={({ target }) => handleValueChange("title", target.value)}
-            />
+      <div className="py-6 max-w-5xl mx-auto">
+        <div className="panel p-6 md:p-8">
+          <div className="flex items-center justify-between gap-4 pb-5 mb-7 border-b border-white/8">
+            <h2 className="font-display text-2xl text-beam">
+              {taskId ? "Update task" : "Create a task"}
+            </h2>
+            {taskId && (
+              <button
+                className="btn btn-danger btn-sm"
+                onClick={() => setOpenDeleteAlert(true)}
+                disabled={loading}
+              >
+                <LuTrash2 />
+                {loading ? "Deleting" : "Delete"}
+              </button>
+            )}
           </div>
 
-          <div>
-            <label className="text-sm font-medium text-gray-700">Description</label>
-            <textarea
-              className="form-input w-full mt-1 rounded-md border-gray-300 focus:ring-blue-500 focus:border-blue-500"
-              rows={4}
-              placeholder="Describe task"
-              value={taskData.description}
-              onChange={({ target }) => handleValueChange("description", target.value)}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="space-y-6">
             <div>
-              <label className="text-sm font-medium text-gray-700">Category</label>
+              <label className="field-label" htmlFor="task-title">Title</label>
               <input
-                list="task-categories"
-                className="form-input w-full mt-1 rounded-md border-gray-300 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="e.g. Design"
-                value={taskData.category}
-                onChange={({ target }) => handleValueChange("category", target.value)}
-              />
-              <datalist id="task-categories">
-                {CATEGORY_DATA.map((c) => (
-                  <option key={c.value} value={c.value} />
-                ))}
-              </datalist>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-700">Priority</label>
-              <SelectDropdown
-                options={PRIORITY_DATA}
-                value={taskData.priority}
-                onChange={(value) => handleValueChange("priority", value)}
-                placeholder="Select Priority"
+                id="task-title"
+                className="field"
+                placeholder="What needs to happen?"
+                value={taskData.title}
+                onChange={({ target }) => handleValueChange("title", target.value)}
               />
             </div>
 
             <div>
-              <label className="text-sm font-medium text-gray-700">Due Date</label>
-              <input
-                type="date"
-                className="form-input w-full mt-1 rounded-md border-gray-300 focus:ring-blue-500 focus:border-blue-500"
-                value={taskData.dueDate}
-                onChange={({ target }) => handleValueChange("dueDate", target.value)}
+              <label className="field-label" htmlFor="task-description">Description</label>
+              <textarea
+                id="task-description"
+                className="field resize-y"
+                rows={4}
+                placeholder="Add the context whoever picks this up will need."
+                value={taskData.description}
+                onChange={({ target }) => handleValueChange("description", target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+              <div>
+                <label className="field-label" htmlFor="task-category">Category</label>
+                <input
+                  id="task-category"
+                  list="task-categories"
+                  className="field"
+                  placeholder="e.g. Design"
+                  value={taskData.category}
+                  onChange={({ target }) => handleValueChange("category", target.value)}
+                />
+                <datalist id="task-categories">
+                  {CATEGORY_DATA.map((c) => (
+                    <option key={c.value} value={c.value} />
+                  ))}
+                </datalist>
+              </div>
+
+              <div>
+                <span className="field-label">Priority</span>
+                <SelectDropdown
+                  options={PRIORITY_DATA}
+                  value={taskData.priority}
+                  onChange={(value) => handleValueChange("priority", value)}
+                  placeholder="Select a priority"
+                />
+              </div>
+
+              <div>
+                <label className="field-label" htmlFor="task-due">Due date</label>
+                <input
+                  id="task-due"
+                  type="date"
+                  className="field"
+                  value={taskData.dueDate || ''}
+                  onChange={({ target }) => handleValueChange("dueDate", target.value)}
+                />
+              </div>
+
+              <div>
+                <span className="field-label">Assigned to</span>
+                <SelectUsers
+                  selectedUsers={taskData.assignedTo}
+                  setSelectedUsers={(value) => handleValueChange("assignedTo", value)}
+                />
+              </div>
+            </div>
+
+            <div>
+              <span className="field-label">Checklist</span>
+              <TodoListInput
+                todoList={taskData.todoChecklist}
+                setTodoList={(value) => handleValueChange("todoChecklist", value)}
               />
             </div>
 
             <div>
-              <label className="text-sm font-medium text-gray-700">Assign To</label>
-              <SelectUsers
-                selectedUsers={taskData.assignedTo}
-                setSelectedUsers={(value) => handleValueChange("assignedTo", value)}
+              <span className="field-label">Attachments</span>
+              <AddAttachmentsInput
+                attachments={taskData.attachments}
+                setAttachments={(value) => handleValueChange("attachments", value)}
               />
             </div>
-          </div>
 
-          <div>
-            <label className="text-sm font-medium text-gray-700">TODO Checklist</label>
-            <TodoListInput
-              todoList={taskData.todoChecklist}
-              setTodoList={(value) => handleValueChange("todoChecklist", value)}
-            />
-          </div>
+            {error && (
+              <p role="alert" className="chip chip-alert w-full justify-start">
+                {error}
+              </p>
+            )}
 
-          <div>
-            <label className="text-sm font-medium text-gray-700">Add Attachments</label>
-            <AddAttachmentsInput
-              attachments={taskData.attachments}
-              setAttachments={(value) => handleValueChange("attachments", value)}
-            />
-          </div>
-
-          {error && <p className="text-sm text-red-600 font-medium mt-2">{error}</p>}
-
-          <div className="flex justify-end pt-4">
-            <button
-              className="bg-blue-600 text-white px-6 py-2 rounded-md text-sm font-medium hover:bg-blue-700 transition-all disabled:opacity-50"
-              onClick={handleSubmit}
-              disabled={loading}
-            >
-              {taskId ? "UPDATE TASK" : "CREATE TASK"}
-            </button>
+            <div className="flex justify-end pt-2">
+              <button
+                className="btn btn-primary"
+                onClick={handleSubmit}
+                disabled={loading}
+              >
+                {loading
+                  ? (taskId ? "Saving" : "Creating")
+                  : (taskId ? "Save changes" : "Create task")}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -300,10 +312,10 @@ const CreateTask = () => {
       <Modal
         isOpen={openDeleteAlert}
         onClose={() => setOpenDeleteAlert(false)}
-        title="Delete Task"
+        title="Delete this task?"
       >
         <DeleteAlert
-          content="Are you sure you want to delete this task?"
+          content="This removes the task, its checklist and its comments for everyone. It cannot be undone."
           onDelete={deleteTask}
         />
       </Modal>

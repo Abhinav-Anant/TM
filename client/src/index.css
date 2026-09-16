@@ -1,50 +1,660 @@
-@import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
-
-
-
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
-.input-box {
-    @apply w-full flex justify-between gap-3 text-sm text-black bg-slate-200/50 rounded px-4 py-3 mb-4 mt-3 border-slate-200 outline-none
+/* ==========================================================================
+   Flight deck - design system
+   Depth is hierarchy. Every surface is glass at a measured height above the
+   ground, lit by one drifting light source. Amber is action, ice is
+   information, and the status hues never borrow either.
+   ========================================================================== */
+
+@theme {
+  /* Ground and surfaces */
+  --color-void: #070a12;
+  --color-hull: #0e1524;
+  --color-deck: #131c2e;
+  --color-seam: #1e2a42;
+
+  /* Light */
+  --color-signal: #ffb020;
+  --color-signal-dim: #b3781a;
+  --color-ice: #7fc7ff;
+
+  /* Text */
+  --color-beam: #eaf1ff;
+  --color-mist: #9fb0ce;
+  --color-dusk: #64748b;
+
+  /* Status - semantic, never reused for chrome */
+  --color-pending: #a78bfa;
+  --color-active: #38bdf8;
+  --color-done: #34d399;
+  --color-alert: #fb7185;
+
+  --font-display: 'Sora', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  --radius-panel: 16px;
 }
 
-/* .btn-primary{
-    @apply w-full text-sm font-medium text-white bg-blue-600 shadow-lg shadow-purple-600/5 p-[10px] rounded-md my-1 hover:bg-blue-600/15 hover:text-blue-600 cursor-pointer 
-} */
-
-.card {
-    @apply bg-white p-6 rounded-2xl shadow-md shadow-gray-200 border border-gray-200/50
+/* Animated light angle. Falls back to a static gradient without @property. */
+@property --beam-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 120deg;
 }
 
-.card-btn {
-    @apply flex items-center gap-3 text-[12px] font-medium text-gray-700 hover:text-blue-700 bg-gray-200 px-4 py-1.5 rounded-lg border border-gray-200/50 cursor-pointer;
+/* --------------------------------------------------------------------------
+   Base
+   -------------------------------------------------------------------------- */
+
+:root {
+  color-scheme: dark; /* native selects, date pickers and scrollbars follow */
+  --lift: 0;          /* set by useTilt; drives every depth response */
+  --tilt-x: 0deg;
+  --tilt-y: 0deg;
+  --spec-x: 50%;
+  --spec-y: 0%;
 }
 
+html {
+  background: var(--color-void);
+}
+
+body {
+  margin: 0;
+  /* Deliberately transparent: a negative-z-index ::before paints behind its
+     parent's background, so an opaque body would hide the light entirely. The
+     ground lives on <html>. */
+  background: transparent;
+  color: var(--color-beam);
+  font-family: var(--font-sans);
+  font-feature-settings: 'cv05' 1, 'ss01' 1;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* The single light source. One layer, behind everything, drifting slowly.
+   Fixed + transform-only animation so it never triggers layout. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: -30vmax;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(38vmax 38vmax at 18% 10%, rgba(56, 132, 255, 0.4), transparent 64%),
+    radial-gradient(30vmax 30vmax at 86% 24%, rgba(255, 176, 32, 0.22), transparent 62%),
+    radial-gradient(46vmax 46vmax at 64% 98%, rgba(124, 78, 230, 0.32), transparent 66%);
+  animation: drift 44s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+/* A faint grid, so depth has something to read against. */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(127, 199, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(127, 199, 255, 0.045) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(120vmax 90vmax at 50% 0%, #000 20%, transparent 75%);
+}
+
+@keyframes drift {
+  from { transform: translate3d(-4%, -2%, 0) scale(1); }
+  to   { transform: translate3d(5%, 4%, 0) scale(1.12); }
+}
+
+/* Numbers never jitter as they update. */
+.num,
+th,
+td,
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+h1, h2, h3, h4, h5 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+
+::selection {
+  background: rgba(255, 176, 32, 0.28);
+  color: var(--color-beam);
+}
+
+/* Keyboard focus is amber everywhere - the accent earns its keep. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-signal);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(127, 199, 255, 0.16);
+  border-radius: 99px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(127, 199, 255, 0.3); background-clip: content-box; }
+
+/* Everything below is component-level. It lives in @layer components so a
+   Tailwind utility in the markup (w-auto, py-2, text-lg) still wins - an
+   unlayered rule would beat every utility and silently ignore them. */
+@layer components {
+
+/* --------------------------------------------------------------------------
+   Glass panels - the core surface
+   -------------------------------------------------------------------------- */
+
+/* The specular hairline along the top edge is what makes a panel read as a
+   physical pane rather than a blurred rectangle. It is the whole trick. */
+/* The legacy class names ride the same rule, so every existing call site in
+   the app inherits the system without being touched. */
+.panel,
+.card,
+.form-card,
+.user-card {
+  position: relative;
+  border-radius: var(--radius-panel);
+  background:
+    linear-gradient(180deg, rgba(148, 178, 255, 0.075), rgba(148, 178, 255, 0.025)),
+    rgba(14, 21, 36, 0.72);
+  border: 1px solid rgba(148, 178, 255, 0.1);
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.05) inset,
+    0 18px 40px -24px rgba(0, 0, 0, 0.9);
+}
+
+/* Blur is deliberately NOT on the base panel. There are twenty-odd panels on a
+   busy screen and only a soft gradient behind them, so blurring buys no visible
+   difference for a lot of per-frame compositing. It goes only on the surfaces
+   that actually overlay content: the bar, the rail, dropdowns and modals. */
+.panel-blur {
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+}
+
+.panel::before,
+.card::before,
+.form-card::before,
+.user-card::before {
+  content: '';
+  position: absolute;
+  inset-inline: 12%;
+  top: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(190, 220, 255, 0.55), transparent);
+  pointer-events: none;
+}
+
+/* Raised: for things the eye should reach first. */
+.panel-raised {
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.07) inset,
+    0 30px 60px -30px rgba(0, 0, 0, 0.95),
+    0 0 0 1px rgba(148, 178, 255, 0.05);
+}
+
+/* Sunken: the rail, wells, and anything the work sits on top of. */
+.panel-sunken {
+  background: rgba(7, 10, 18, 0.55);
+  border: 1px solid rgba(148, 178, 255, 0.07);
+  box-shadow: 0 2px 12px -6px rgba(0, 0, 0, 0.8) inset;
+}
+
+/* --------------------------------------------------------------------------
+   3D response - pointer-tracked tilt, driven by useTilt
+   -------------------------------------------------------------------------- */
+
+.stage { perspective: 1200px; }
+
+.tilt {
+  transform-style: preserve-3d;
+  /* Identity transform on the base so hovering never creates a new stacking
+     context out of nowhere and reshuffles z-order. */
+  transform: perspective(1200px) rotateX(0deg) rotateY(0deg) translate3d(0, 0, 0);
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 0.3s ease;
+  will-change: transform;
+}
+
+.tilt[data-tilting='true'] {
+  transform:
+    perspective(1200px)
+    rotateX(var(--tilt-x))
+    rotateY(var(--tilt-y))
+    translate3d(0, -4px, 30px);
+  transition-duration: 0.12s;
+  border-color: rgba(127, 199, 255, 0.26);
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.09) inset,
+    0 40px 70px -32px rgba(0, 0, 0, 1),
+    0 0 40px -12px rgba(127, 199, 255, 0.28);
+}
+
+/* The light the pointer drags across the glass. */
+.tilt-gloss {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  background: radial-gradient(
+    22rem 22rem at var(--spec-x) var(--spec-y),
+    rgba(190, 220, 255, 0.14),
+    transparent 60%
+  );
+}
+
+.tilt[data-tilting='true'] .tilt-gloss { opacity: 1; }
+
+/* Content that should float above the glass as the card turns. */
+.tilt-layer { transform: translateZ(28px); }
+
+/* --------------------------------------------------------------------------
+   Controls
+   -------------------------------------------------------------------------- */
+
+.btn,
+.card-btn,
+.card-btn-fill,
+.add-btn,
+.download-btn {
+  @apply inline-flex items-center justify-center gap-2 text-sm font-medium rounded-lg px-4 py-2.5 cursor-pointer;
+  border: 1px solid rgba(148, 178, 255, 0.14);
+  background: rgba(148, 178, 255, 0.06);
+  color: var(--color-beam);
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  transform: translateY(0);
+}
+
+.btn:hover:not(:disabled),
+.card-btn:hover:not(:disabled),
+.add-btn:hover:not(:disabled),
+.download-btn:hover:not(:disabled) {
+  background: rgba(148, 178, 255, 0.12);
+  border-color: rgba(127, 199, 255, 0.34);
+  transform: translateY(-1px);
+}
+
+.btn:active:not(:disabled) { transform: translateY(0); }
+
+.btn:disabled,
+.card-btn:disabled,
+.card-btn-fill:disabled,
+.add-btn:disabled,
+.download-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Amber is reserved for the one action that matters on a screen. */
+.btn-primary,
 .card-btn-fill {
-    @apply flex items-center gap-3 text-[12px] font-medium text-white hover:text-blue-700 bg-blue-700 hover:bg-blue-50 px-4 py-1.5 rounded-lg border border-blue-700 cursor-pointer;
+  background: linear-gradient(180deg, #ffc247, var(--color-signal));
+  border-color: rgba(255, 176, 32, 0.6);
+  color: #241704;
+  font-weight: 600;
+  box-shadow: 0 8px 26px -12px rgba(255, 176, 32, 0.8), 0 1px 0 0 rgba(255, 255, 255, 0.3) inset;
 }
 
-
-.form-card {
-    @apply bg-white p-6 rounded-lg shadow-md shadow-gray-100 border border-gray-200/50;
+.btn-primary:hover:not(:disabled),
+.card-btn-fill:hover:not(:disabled) {
+  background: linear-gradient(180deg, #ffce68, #ffbb35);
+  border-color: rgba(255, 176, 32, 0.9);
+  box-shadow: 0 14px 34px -12px rgba(255, 176, 32, 0.9), 0 1px 0 0 rgba(255, 255, 255, 0.4) inset;
 }
 
-.form-input {
-    @apply w-full text-sm text-black outline-none bg-white border border-slate-100 px-2.5 py-3 rounded-md mt-2 placeholder:text-gray-500 shadow-sm ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-200
+.btn-danger {
+  background: rgba(251, 113, 133, 0.12);
+  border-color: rgba(251, 113, 133, 0.35);
+  color: var(--color-alert);
 }
 
-.add-btn {
-    @apply w-full flex items-center justify-center gap-1.5 text-xs md:text-xs font-medium text-blue-600 whitespace-nowrap bg-blue-50 border border-blue-100 rounded-lg px-4 py-2 cursor-pointer;
-
-   
-    @apply hover:bg-black hover:border-blue-200 hover:text-white;
+.btn-danger:hover:not(:disabled) {
+  background: rgba(251, 113, 133, 0.2);
+  border-color: rgba(251, 113, 133, 0.55);
 }
 
+.btn-sm { @apply text-xs px-3 py-1.5; }
 
-.download-btn{
-    @apply items-center gap-3 text-xs md:text-[13px] text-lime-900 bg-lime-100 px-2 md:px-3 py-2 rounded border border-lime-200 hover:border-lime-400 cursor-pointer
+/* --------------------------------------------------------------------------
+   Fields
+   -------------------------------------------------------------------------- */
+
+.field,
+.form-input,
+.input-box {
+  @apply w-full text-sm rounded-lg px-3.5 py-3 outline-none;
+  background: rgba(7, 10, 18, 0.6);
+  border: 1px solid rgba(148, 178, 255, 0.14);
+  color: var(--color-beam);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
-.user-card{
-    @apply bg-white p-4 rounded-xl shadow-md shadow-gray-200 border border-gray-300
+.field::placeholder,
+.form-input::placeholder { color: var(--color-dusk); }
+
+.field:focus,
+.form-input:focus {
+  border-color: rgba(255, 176, 32, 0.55);
+  background: rgba(7, 10, 18, 0.8);
+  box-shadow: 0 0 0 3px rgba(255, 176, 32, 0.12);
+  outline: none;
+}
+
+.field-label {
+  @apply block text-xs font-medium mb-2;
+  color: var(--color-mist);
+}
+
+select.field { appearance: none; padding-right: 2.25rem; }
+
+/* One arrow for every native select, drawn rather than shipped as an icon. */
+.select-wrap { position: relative; }
+.select-wrap::after {
+  content: '';
+  position: absolute;
+  right: 0.9rem;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid var(--color-mist);
+  border-bottom: 1.5px solid var(--color-mist);
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}
+
+input[type='checkbox'] {
+  accent-color: var(--color-signal);
+  cursor: pointer;
+}
+
+input[type='date'].field::-webkit-calendar-picker-indicator {
+  filter: invert(0.7);
+  cursor: pointer;
+}
+
+/* --------------------------------------------------------------------------
+   Chips - status, priority, category
+   -------------------------------------------------------------------------- */
+
+.chip {
+  @apply inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-md whitespace-nowrap;
+  border: 1px solid transparent;
+  letter-spacing: 0.01em;
+}
+
+.chip-pending { color: var(--color-pending); background: rgba(167, 139, 250, 0.12); border-color: rgba(167, 139, 250, 0.28); }
+.chip-active  { color: var(--color-active);  background: rgba(56, 189, 248, 0.12);  border-color: rgba(56, 189, 248, 0.28); }
+.chip-done    { color: var(--color-done);    background: rgba(52, 211, 153, 0.12);  border-color: rgba(52, 211, 153, 0.28); }
+.chip-alert   { color: var(--color-alert);   background: rgba(251, 113, 133, 0.12); border-color: rgba(251, 113, 133, 0.3); }
+.chip-signal  { color: var(--color-signal);  background: rgba(255, 176, 32, 0.12);  border-color: rgba(255, 176, 32, 0.3); }
+.chip-ice     { color: var(--color-ice);     background: rgba(127, 199, 255, 0.1);  border-color: rgba(127, 199, 255, 0.25); }
+.chip-mist    { color: var(--color-mist);    background: rgba(148, 178, 255, 0.07); border-color: rgba(148, 178, 255, 0.16); }
+
+/* --------------------------------------------------------------------------
+   Legacy class names - only the bits the shared rules above cannot carry
+   -------------------------------------------------------------------------- */
+
+.card,
+.form-card { @apply p-6; }
+.user-card { @apply p-4; }
+.form-input { @apply mt-2; }
+.input-box { @apply flex justify-between items-center gap-3 mb-4 mt-2; }
+
+.card-btn,
+.card-btn-fill,
+.add-btn,
+.download-btn { @apply text-xs px-3 py-1.5; }
+
+.add-btn { @apply w-full; }
+
+/* --------------------------------------------------------------------------
+   Entry and exit - modals, dropdowns, panels
+   -------------------------------------------------------------------------- */
+
+/* Arrives from depth, leaves the same way. */
+.enter-depth {
+  opacity: 1;
+  transform: translateZ(0) scale(1);
+  transition: opacity 0.28s ease, transform 0.36s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@starting-style {
+  .enter-depth {
+    opacity: 0;
+    transform: perspective(900px) translate3d(0, 14px, -160px) scale(0.94);
+  }
+}
+
+.enter-fade {
+  opacity: 1;
+  transition: opacity 0.25s ease;
+}
+
+@starting-style {
+  .enter-fade { opacity: 0; }
+}
+
+/* Modals arrive from depth. The dialog itself is the full-viewport catcher so
+   a backdrop click is distinguishable from a click on the panel. */
+.modal {
+  width: 100vw;
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  margin: 0;
+  padding: 1rem;
+  border: 0;
+  background: transparent;
+  overflow: auto;
+  display: grid;
+  place-items: center;
+}
+
+.modal:not([open]) { display: none; }
+
+.modal-panel {
+  width: min(92vw, 42rem);
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+  opacity: 1;
+  transform: perspective(1000px) translate3d(0, 0, 0) scale(1);
+  transition: opacity 0.3s ease, transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@starting-style {
+  .modal[open] .modal-panel {
+    opacity: 0;
+    transform: perspective(1000px) translate3d(0, 20px, -220px) scale(0.92);
+  }
+}
+
+.modal::backdrop {
+  background: rgba(3, 5, 10, 0.72);
+  backdrop-filter: blur(6px);
+  transition: display 0.3s allow-discrete, overlay 0.3s allow-discrete, background-color 0.3s ease;
+}
+
+.modal[open]::backdrop {
+  @starting-style {
+    background: rgba(3, 5, 10, 0);
+  }
+}
+
+/* Dropdowns and popovers drop forward from the surface behind them. */
+.enter-drop {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transform-origin: top right;
+  transition: opacity 0.2s ease, transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@starting-style {
+  .enter-drop {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.97);
+  }
+}
+
+}
+
+/* --------------------------------------------------------------------------
+   Route transitions
+   -------------------------------------------------------------------------- */
+
+@view-transition { navigation: auto; }
+
+::view-transition-old(root) {
+  animation: vt-out 0.22s cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+::view-transition-new(root) {
+  animation: vt-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes vt-out {
+  to { opacity: 0; transform: translateZ(0) scale(0.99); }
+}
+
+@keyframes vt-in {
+  from { opacity: 0; transform: perspective(1000px) translate3d(0, 10px, -60px); }
+}
+
+/* The shell stays put while the content behind it changes. */
+.vt-rail { view-transition-name: rail; }
+.vt-bar { view-transition-name: bar; }
+
+/* Everything below is component-level. It lives in @layer components so a
+   Tailwind utility in the markup (w-auto, py-2, text-lg) still wins - an
+   unlayered rule would beat every utility and silently ignore them. */
+@layer components {
+
+/* --------------------------------------------------------------------------
+   Auth hero - the one orchestrated page-load moment in the app
+   -------------------------------------------------------------------------- */
+
+.auth-deck {
+  transform-style: preserve-3d;
+  transform: rotateY(-19deg) rotateX(9deg);
+  animation: deck-turn 18s ease-in-out infinite alternate;
+}
+
+.auth-card {
+  transform-style: preserve-3d;
+  transform: translateZ(calc(var(--i) * 34px));
+  animation:
+    card-arrive 0.9s cubic-bezier(0.22, 1, 0.36, 1) both,
+    card-float 7s ease-in-out infinite alternate;
+  animation-delay: calc(var(--i) * 130ms), calc(600ms + var(--i) * 300ms);
+}
+
+.auth-fill {
+  width: var(--to);
+  animation: fill-in 1.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(500ms + var(--i, 0) * 130ms);
+}
+
+@keyframes deck-turn {
+  from { transform: rotateY(-19deg) rotateX(9deg); }
+  to   { transform: rotateY(-9deg) rotateX(4deg); }
+}
+
+@keyframes card-arrive {
+  from {
+    opacity: 0;
+    transform: translateZ(calc(var(--i) * 34px)) translate3d(40px, 24px, -220px);
+  }
+}
+
+@keyframes card-float {
+  to { transform: translateZ(calc(var(--i) * 34px)) translateY(-10px); }
+}
+
+@keyframes fill-in {
+  from { width: 0%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-deck { animation: none; }
+  .auth-card { animation: none; }
+  .auth-fill { animation: none; }
+}
+
+/* --------------------------------------------------------------------------
+   Utilities
+   -------------------------------------------------------------------------- */
+
+.hairline { border-color: rgba(148, 178, 255, 0.1); }
+
+/* For strips that scroll sideways on small screens, where a visible bar under
+   the content is more noise than signal. */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* A quiet amber underglow for the one active thing in a list. */
+.is-current {
+  background: linear-gradient(90deg, rgba(255, 176, 32, 0.14), transparent 70%);
+  color: var(--color-signal);
+}
+
+/* Loading: a pulse rather than a spinner, so it reads as the panel breathing. */
+.skeleton {
+  background: linear-gradient(90deg, rgba(148, 178, 255, 0.05), rgba(148, 178, 255, 0.11), rgba(148, 178, 255, 0.05));
+  background-size: 200% 100%;
+  animation: sweep 1.4s ease-in-out infinite;
+  border-radius: 8px;
+}
+
+@keyframes sweep {
+  to { background-position: -200% 0; }
+}
+
+}
+
+/* --------------------------------------------------------------------------
+   Reduced motion - honour it properly, not by halving durations
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
+
+  .tilt,
+  .tilt[data-tilting='true'] {
+    transform: none;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  }
+
+  .tilt-gloss { display: none; }
+  .btn:hover:not(:disabled) { transform: none; }
+
+  .enter-depth,
+  .enter-drop,
+  .enter-fade,
+  .modal-panel {
+    transition-duration: 0.01ms;
+    transform: none;
+  }
+
+  @starting-style {
+    .enter-depth, .enter-drop { transform: none; }
+    .modal[open] .modal-panel { transform: none; }
+  }
+
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+
+  .skeleton { animation: none; }
 }

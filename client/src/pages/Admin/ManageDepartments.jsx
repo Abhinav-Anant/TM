@@ -4,6 +4,7 @@ import axiosInstance from '../../utils/axiosInstance';
 import { API_PATHS } from '../../utils/apiPaths';
 import toast from 'react-hot-toast';
 import { LuTrash2, LuPlus, LuUsers, LuPencil } from 'react-icons/lu';
+import { tilt } from '../../utils/tilt';
 
 const roleLabel = { head: 'Head of Department', member: 'Member' };
 
@@ -126,105 +127,136 @@ const ManageDepartments = () => {
 
   return (
     <DashboardLayout activeMenu="Departments">
-      <div className="mt-5 mb-10">
-        <h2 className="text-xl font-medium">Departments</h2>
+      <div className="py-6">
+        <h2 className="font-display text-2xl text-beam">Departments</h2>
+        <p className="text-sm text-mist mt-1.5">
+          Group the team so heads only see their own people and their own work.
+        </p>
 
-        <form onSubmit={createDepartment} className="flex gap-2 mt-4">
+        <form onSubmit={createDepartment} className="flex flex-wrap gap-3 mt-5">
           <input
             type="text"
             value={newName}
             onChange={(event) => setNewName(event.target.value)}
             placeholder="New department name"
-            className="border border-gray-200 rounded px-3 py-2 text-sm w-full md:w-72"
+            aria-label="New department name"
+            className="field w-full sm:w-80"
           />
-          <button
-            type="submit"
-            className="flex items-center gap-1 bg-blue-500 text-white rounded px-4 py-2 text-sm"
-          >
-            <LuPlus className="text-lg" /> Add
+          <button type="submit" className="btn btn-primary shrink-0">
+            <LuPlus /> Add department
           </button>
         </form>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-          {departments.map((department) => (
-            <div
-              key={department._id}
-              className="bg-white p-4 rounded-lg shadow-md shadow-gray-100 border border-gray-200/50"
-            >
-              <div className="flex items-center justify-between">
-                <h3 className="font-medium">{department.name}</h3>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => renameDepartment(department)}
-                    aria-label={`Rename ${department.name}`}
-                  >
-                    <LuPencil className="text-gray-400 hover:text-blue-500" />
-                  </button>
-                  <button
-                    onClick={() => deleteDepartment(department)}
-                    aria-label={`Delete ${department.name}`}
-                  >
-                    <LuTrash2 className="text-gray-400 hover:text-rose-500" />
-                  </button>
+        {departments.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mt-6">
+            {departments.map((department) => {
+              const isOpen = String(selected?.department?._id || '') === String(department._id);
+              return (
+                <div
+                  key={department._id}
+                  className={`panel tilt relative overflow-hidden p-4 ${
+                    isOpen ? 'border-signal/40' : ''
+                  }`}
+                  {...tilt}
+                >
+                  <span className="tilt-gloss" />
+
+                  <div className="relative tilt-layer">
+                    <div className="flex items-start justify-between gap-3">
+                      <h3 className="font-display text-beam">{department.name}</h3>
+                      <div className="flex gap-1 shrink-0">
+                        <button
+                          onClick={() => renameDepartment(department)}
+                          aria-label={`Rename ${department.name}`}
+                          className="grid place-items-center w-8 h-8 rounded-lg text-dusk hover:text-ice hover:bg-white/8 transition-colors cursor-pointer"
+                        >
+                          <LuPencil />
+                        </button>
+                        <button
+                          onClick={() => deleteDepartment(department)}
+                          aria-label={`Delete ${department.name}`}
+                          className="grid place-items-center w-8 h-8 rounded-lg text-dusk hover:text-alert hover:bg-white/8 transition-colors cursor-pointer"
+                        >
+                          <LuTrash2 />
+                        </button>
+                      </div>
+                    </div>
+
+                    <p className="flex items-center gap-1.5 text-xs text-mist mt-2">
+                      <LuUsers />
+                      <span className="num">{department.memberCount}</span>
+                      member{department.memberCount === 1 ? '' : 's'}
+                    </p>
+
+                    <button
+                      onClick={() => openDepartment(department._id)}
+                      className="btn btn-sm mt-4"
+                    >
+                      {isOpen ? 'Viewing members' : 'Manage members'}
+                    </button>
+                  </div>
                 </div>
-              </div>
-              <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                <LuUsers /> {department.memberCount} member{department.memberCount === 1 ? '' : 's'}
-              </p>
-              <button
-                onClick={() => openDepartment(department._id)}
-                className="text-xs text-blue-500 mt-3"
-              >
-                Manage members
-              </button>
-            </div>
-          ))}
-          {departments.length === 0 && (
-            <p className="text-sm text-gray-500">No departments yet. Create one above.</p>
-          )}
-        </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="panel p-12 mt-6 text-center">
+            <p className="text-beam">No departments yet.</p>
+            <p className="text-sm text-mist mt-1">Name one above to get started.</p>
+          </div>
+        )}
 
         {selected && (
-          <div className="mt-8 bg-white p-4 rounded-lg shadow-md shadow-gray-100 border border-gray-200/50">
-            <h3 className="font-medium">{selected.department.name} &mdash; members</h3>
+          <div className="enter-depth panel panel-raised p-6 mt-6">
+            <h3 className="font-display text-lg text-beam">
+              Members of {selected.department.name}
+            </h3>
 
-            <div className="flex gap-2 mt-4">
-              <select
-                value={addUserId}
-                onChange={(event) => setAddUserId(event.target.value)}
-                className="border border-gray-200 rounded px-3 py-2 text-sm w-full md:w-72"
-              >
-                <option value="">Select a person to add...</option>
-                {candidates.map((user) => (
-                  <option key={user._id} value={user._id}>
-                    {user.name} ({roleLabel[user.role] || user.role})
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={addMember}
-                className="bg-blue-500 text-white rounded px-4 py-2 text-sm"
-              >
-                Add
+            <div className="flex flex-wrap gap-3 mt-4">
+              <div className="select-wrap w-full sm:w-80">
+                <select
+                  value={addUserId}
+                  onChange={(event) => setAddUserId(event.target.value)}
+                  aria-label="Person to add"
+                  className="field cursor-pointer"
+                >
+                  <option value="">Choose someone to add</option>
+                  {candidates.map((user) => (
+                    <option key={user._id} value={user._id}>
+                      {user.name} ({roleLabel[user.role] || user.role})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button onClick={addMember} className="btn shrink-0">
+                Add to department
               </button>
             </div>
 
-            <ul className="mt-4 divide-y divide-gray-100">
+            <ul className="mt-5 space-y-1.5">
               {selected.members.map((member) => (
-                <li key={member._id} className="flex items-center justify-between py-2">
-                  <span className="text-sm">
+                <li
+                  key={member._id}
+                  className="group flex items-center justify-between gap-3 panel-sunken rounded-lg px-3.5 py-2.5"
+                >
+                  <span className="text-sm text-beam min-w-0 truncate">
                     {member.name}
-                    <span className="text-xs text-gray-500 ml-2">
+                    <span className="chip chip-mist ml-2">
                       {roleLabel[member.role] || member.role}
                     </span>
                   </span>
-                  <button onClick={() => removeMember(member._id)} className="text-xs text-rose-500">
+                  <button
+                    onClick={() => removeMember(member._id)}
+                    className="text-xs text-dusk hover:text-alert opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity cursor-pointer shrink-0"
+                  >
                     Remove
                   </button>
                 </li>
               ))}
               {selected.members.length === 0 && (
-                <li className="text-sm text-gray-500 py-2">No members yet.</li>
+                <li className="text-sm text-dusk py-2">
+                  Nobody here yet. Add someone with the picker above.
+                </li>
               )}
             </ul>
           </div>

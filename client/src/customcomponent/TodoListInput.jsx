@@ -1,62 +1,61 @@
-import React, { useState } from 'react'
-import { HiMiniPlus, HiOutlineTrash } from "react-icons/hi2";
+import React, { useState } from 'react';
+import { LuPlus, LuTrash2, LuSquare } from 'react-icons/lu';
 
-const TodoListInput = ({ todoList, setTodoList }) => {
-    const [option, setOption] = useState("");
+const TodoListInput = ({ todoList = [], setTodoList }) => {
+    const [option, setOption] = useState('');
 
-    // Add a new option to the list
     const handleAddOption = () => {
-        if (option.trim()) {
-            setTodoList([...todoList, option.trim()]);
-            setOption(""); // Clear input field after adding
-        }
-    }
+        const trimmed = option.trim();
+        if (!trimmed) return;
+        setTodoList([...todoList, trimmed]);
+        setOption('');
+    };
 
-    // Delete an option from the list
     const handleDeleteOption = (index) => {
-        const updatedArr = todoList.filter((_, idx) => idx !== index);
-        setTodoList(updatedArr);
-    }
+        setTodoList(todoList.filter((_, idx) => idx !== index));
+    };
 
     return (
-        <div>
-            {todoList.map((item, index) => (
-                <div
-                    className='flex justify-between bg-gray-50 border border-gray-100 px-3 py-2 rounded-md mb-3 mt-2'
-                    key={index} // Use `index` here as the unique key
-                >
-                    <p className='text-xs text-black'>
-                        <span className='text-xs text-gray-400 font-semibold mr-2'>
-                            {index < 9 ? `0${index + 1}` : index + 1}
-                        </span>
-                        {item}
-                    </p>
-                    <button
-                        className='cursor-pointer'
-                        onClick={() => handleDeleteOption(index)} // Pass `index` here
+        <div className="mt-2">
+            <ul className="space-y-2">
+                {todoList.map((item, index) => (
+                    <li
+                        key={`${item}_${index}`}
+                        className="group flex items-center gap-3 panel-sunken rounded-lg px-3 py-2.5"
                     >
-                        <HiOutlineTrash className='text-lg text-red-500' />
-                    </button>
-                </div>
-            ))}
+                        {/* An empty box, because that is what this becomes once the
+                            task is saved and someone starts ticking it off. */}
+                        <LuSquare className="text-dusk shrink-0" />
+                        <p className="text-sm text-beam flex-1 break-words">{item}</p>
+                        <button
+                            type="button"
+                            aria-label={`Remove ${item}`}
+                            className="text-dusk hover:text-alert opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity cursor-pointer"
+                            onClick={() => handleDeleteOption(index)}
+                        >
+                            <LuTrash2 />
+                        </button>
+                    </li>
+                ))}
+            </ul>
 
-            <div className='flex items-center gap-5 mt-4'>
+            <div className="flex items-center gap-3 mt-3">
                 <input
                     type="text"
-                    className='w-full text-[13px] text-black outline-none bg-white border border-gray-100 px-3 py-2 rounded-md'
-                    placeholder='Enter Task'
+                    className="field"
+                    placeholder="Add a step"
                     value={option}
                     onChange={({ target }) => setOption(target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); handleAddOption(); }
+                    }}
                 />
-                <button
-                    className='card-btn text-nowrap'
-                    onClick={handleAddOption} // Call `handleAddOption` here
-                >
-                    <HiMiniPlus className='text-lg' /> Add
+                <button type="button" className="btn shrink-0" onClick={handleAddOption}>
+                    <LuPlus /> Add
                 </button>
             </div>
         </div>
-    )
-}
+    );
+};
 
 export default TodoListInput;

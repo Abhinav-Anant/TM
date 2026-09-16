@@ -68,55 +68,55 @@ const AddAttachmentsInput = ({ attachments = [], setAttachments }) => {
         <div>
             {attachments.map((item, index) => (
                 <div
-                    className='flex justify-between items-center bg-gray-50 border border-gray-100 px-3 py-2 rounded-md mb-3 mt-2'
+                    className='group flex justify-between items-center panel-sunken rounded-lg px-3 py-2.5 mb-2'
                     key={`${item}_${index}`}
                 >
                     <div className='flex-1 flex items-center gap-3 min-w-0'>
-                        <LuPaperclip className='text-gray-400 shrink-0' />
+                        <LuPaperclip className='text-dusk shrink-0' />
                         <a
                             href={item}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className='text-xs text-black truncate hover:text-blue-600 hover:underline'
+                            className='text-sm text-beam truncate hover:text-signal hover:underline'
                             title={item}
                             onClick={(e) => e.stopPropagation()}
                         >
                             {fileNameOf(item)}
                         </a>
-                        <LuExternalLink className='text-gray-300 text-xs shrink-0' />
+                        <LuExternalLink className='text-dusk text-xs shrink-0' />
                     </div>
 
                     <button
                         type='button'
-                        className='cursor-pointer ml-3'
+                        className='text-dusk hover:text-alert ml-3 cursor-pointer transition-colors'
                         aria-label='Remove attachment'
                         onClick={() => handleDeleteOption(index)}
                     >
-                        <HiOutlineTrash className='text-lg text-red-500' />
+                        <HiOutlineTrash className='text-alert' />
                     </button>
                 </div>
             ))}
 
             <div className='flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mt-4'>
-                <div className='flex-1 flex items-center gap-3 border border-gray-200 rounded-md px-3'>
-                    <LuPaperclip className='text-gray-400' />
+                <div className='field flex-1 flex items-center gap-3 py-0'>
+                    <LuPaperclip className='text-dusk shrink-0' />
                     <input
                         type="text"
                         placeholder='Paste a file link'
                         value={option}
                         onChange={({ target }) => setOption(target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddOption(); } }}
-                        className='w-full text-[13px] text-black outline-none bg-white py-2'
+                        className='w-full text-sm text-beam placeholder:text-dusk outline-none bg-transparent py-2.5'
                     />
                 </div>
 
-                <button type='button' className='card-btn text-nowrap justify-center' onClick={handleAddOption}>
+                <button type='button' className='btn text-nowrap justify-center' onClick={handleAddOption}>
                     <HiMiniPlus className='text-lg' /> Add Link
                 </button>
 
                 <button
                     type='button'
-                    className='card-btn text-nowrap justify-center'
+                    className='btn text-nowrap justify-center'
                     disabled={uploading}
                     onClick={() => fileInputRef.current?.click()}
                 >
@@ -133,7 +133,7 @@ const AddAttachmentsInput = ({ attachments = [], setAttachments }) => {
                 />
             </div>
 
-            <p className='text-[11px] text-gray-400 mt-2'>
+            <p className='text-[11px] text-dusk mt-2'>
                 Up to {MAX_FILES} files, {MAX_SIZE_MB}MB each. Images, PDF, Office docs, text, CSV and ZIP.
             </p>
         </div>

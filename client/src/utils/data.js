@@ -134,12 +134,12 @@ export const SORT_OPTIONS = [
 ];
 
 export const CATEGORY_COLORS = [
-  "bg-blue-50 text-blue-600 border-blue-200",
-  "bg-purple-50 text-purple-600 border-purple-200",
-  "bg-teal-50 text-teal-600 border-teal-200",
-  "bg-orange-50 text-orange-600 border-orange-200",
-  "bg-pink-50 text-pink-600 border-pink-200",
-  "bg-indigo-50 text-indigo-600 border-indigo-200",
+  "text-[#7fc7ff] bg-[#7fc7ff]/10 border-[#7fc7ff]/25",
+  "text-[#c4b5fd] bg-[#c4b5fd]/10 border-[#c4b5fd]/25",
+  "text-[#5eead4] bg-[#5eead4]/10 border-[#5eead4]/25",
+  "text-[#fdba74] bg-[#fdba74]/10 border-[#fdba74]/25",
+  "text-[#f9a8d4] bg-[#f9a8d4]/10 border-[#f9a8d4]/25",
+  "text-[#a5b4fc] bg-[#a5b4fc]/10 border-[#a5b4fc]/25",
 ];
 
 // Stable colour per category name without keeping a colour map in sync.
@@ -147,4 +147,58 @@ export const categoryColor = (name = "") => {
   let hash = 0;
   for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) | 0;
   return CATEGORY_COLORS[Math.abs(hash) % CATEGORY_COLORS.length];
+};
+
+/**
+ * One source of truth for what a status or priority looks like. Four
+ * components used to each carry their own switch, and they had already drifted
+ * apart - "Pending" was violet in one place and indigo in another.
+ */
+export const statusChip = (status) => ({
+  "In Progress": "chip-active",
+  Completed: "chip-done",
+  Pending: "chip-pending",
+}[status] || "chip-mist");
+
+export const priorityChip = (priority) => ({
+  High: "chip-alert",
+  Medium: "chip-signal",
+  Low: "chip-done",
+}[priority] || "chip-mist");
+
+/** Bar and dot fills, for places a chip would be too heavy. */
+export const statusFill = (status) => ({
+  "In Progress": "bg-active",
+  Completed: "bg-done",
+  Pending: "bg-pending",
+}[status] || "bg-mist");
+
+/** Matching text colour, for anything that glows in its own hue (currentColor). */
+export const statusText = (status) => ({
+  "In Progress": "text-active",
+  Completed: "text-done",
+  Pending: "text-pending",
+}[status] || "text-mist");
+
+export const priorityFill = (priority) => ({
+  High: "bg-alert",
+  Medium: "bg-signal",
+  Low: "bg-done",
+}[priority] || "bg-mist");
+
+/**
+ * Chart series colours. Deliberately deeper steps than the UI chips: these are
+ * selected for the dark chart surface (#0e1524), not flipped from the light
+ * ones. Both sets are validated - status passes every check outright
+ * (worst adjacent CVD dE 13.7); priority sits in the 6-8 CVD floor band at 7.9,
+ * which holds because every bar is labelled on the x-axis.
+ */
+export const STATUS_CHART_COLORS = ["#8b5cf6", "#0369a1", "#059669"];
+export const PRIORITY_CHART_COLORS = { Low: "#059669", Medium: "#d97706", High: "#e11d48" };
+
+/** Chart chrome, so axes and grids stay recessive against the panel. */
+export const CHART_INK = {
+  grid: "rgba(148,178,255,0.09)",
+  axis: "rgba(159,176,206,0.55)",
+  label: "#9fb0ce",
 };

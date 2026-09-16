@@ -15,7 +15,7 @@ export const EMPTY_FILTERS = {
 const SEARCH_DEBOUNCE_MS = 350;
 
 const selectClass =
-    "text-sm text-gray-700 bg-white border border-slate-200 rounded-md px-2.5 py-2 outline-none focus:ring-2 focus:ring-blue-200";
+    "field py-2 cursor-pointer";
 
 /**
  * Search + advanced filter bar. Native <select> and <input type="date"> instead of
@@ -60,22 +60,22 @@ const TaskFilters = ({ filters, setFilters, categories = [] }) => {
         : [];
 
     return (
-        <div className="bg-white border border-gray-200/70 rounded-lg p-3 mt-4">
+        <div className="panel p-3 mt-4">
             <div className="flex flex-wrap items-center gap-2">
-                <div className="flex-1 min-w-[200px] flex items-center gap-2 border border-slate-200 rounded-md px-3 py-2">
-                    <LuSearch className="text-gray-400 shrink-0" />
+                <div className="field flex-1 min-w-[200px] flex items-center gap-2 py-2">
+                    <LuSearch className="text-dusk shrink-0" />
                     <input
                         type="search"
                         value={searchText}
                         onChange={(e) => setSearchText(e.target.value)}
                         placeholder="Search tasks by title or description"
                         aria-label="Search tasks"
-                        className="w-full text-sm outline-none bg-transparent"
+                        className="w-full text-sm text-beam placeholder:text-dusk outline-none bg-transparent"
                     />
                 </div>
 
                 <select
-                    className={selectClass}
+                    className={`${selectClass} w-auto`}
                     value={filters.sort}
                     aria-label="Sort tasks"
                     onChange={(e) => update("sort", e.target.value)}
@@ -88,7 +88,7 @@ const TaskFilters = ({ filters, setFilters, categories = [] }) => {
                 <button
                     type="button"
                     className={`flex items-center gap-2 text-sm px-3 py-2 rounded-md border cursor-pointer ${
-                        activeCount ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 text-gray-600"
+                        activeCount ? "border-signal/40 bg-signal/10 text-signal" : "border-white/12 text-mist hover:text-beam"
                     }`}
                     onClick={() => setExpanded((v) => !v)}
                     aria-expanded={expanded}
@@ -100,7 +100,7 @@ const TaskFilters = ({ filters, setFilters, categories = [] }) => {
                 {(activeCount > 0 || filters.search) && (
                     <button
                         type="button"
-                        className="flex items-center gap-1 text-sm text-gray-500 hover:text-rose-500 px-2 py-2 cursor-pointer"
+                        className="flex items-center gap-1.5 text-sm text-dusk hover:text-alert px-2 py-2 cursor-pointer transition-colors"
                         onClick={reset}
                     >
                         <LuX /> Clear
@@ -109,8 +109,8 @@ const TaskFilters = ({ filters, setFilters, categories = [] }) => {
             </div>
 
             {expanded && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mt-3 pt-3 border-t border-gray-100">
-                    <label className="flex flex-col gap-1 text-xs font-medium text-gray-500">
+                <div className="enter-fade grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mt-3 pt-3 border-t border-white/8">
+                    <label className="flex flex-col gap-1.5 text-xs font-medium text-mist">
                         Priority
                         <select
                             className={selectClass}
@@ -124,7 +124,7 @@ const TaskFilters = ({ filters, setFilters, categories = [] }) => {
                         </select>
                     </label>
 
-                    <label className="flex flex-col gap-1 text-xs font-medium text-gray-500">
+                    <label className="flex flex-col gap-1.5 text-xs font-medium text-mist">
                         Category
                         <select
                             className={selectClass}
@@ -138,7 +138,7 @@ const TaskFilters = ({ filters, setFilters, categories = [] }) => {
                         </select>
                     </label>
 
-                    <label className="flex flex-col gap-1 text-xs font-medium text-gray-500">
+                    <label className="flex flex-col gap-1.5 text-xs font-medium text-mist">
                         Due from
                         <input
                             type="date"
@@ -148,7 +148,7 @@ const TaskFilters = ({ filters, setFilters, categories = [] }) => {
                         />
                     </label>
 
-                    <label className="flex flex-col gap-1 text-xs font-medium text-gray-500">
+                    <label className="flex flex-col gap-1.5 text-xs font-medium text-mist">
                         Due until
                         <input
                             type="date"
@@ -158,7 +158,7 @@ const TaskFilters = ({ filters, setFilters, categories = [] }) => {
                         />
                     </label>
 
-                    <label className="flex items-end gap-2 text-sm text-gray-700 pb-2">
+                    <label className="flex items-end gap-2 text-sm text-mist pb-2.5 cursor-pointer">
                         <input
                             type="checkbox"
                             className="w-4 h-4 rounded"

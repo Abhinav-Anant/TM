@@ -68,11 +68,21 @@ const App = () => {
           </Router>
         </div>
         <Toaster
+          position="bottom-right"
           toastOptions={{
-            className: "",
+            // Toasts are glass panels too, so a confirmation never looks like it
+            // came from a different application.
             style: {
-              fontSize: "13px",
-            }
+              fontSize: '13px',
+              background: 'rgba(14, 21, 36, 0.86)',
+              color: '#eaf1ff',
+              border: '1px solid rgba(148, 178, 255, 0.14)',
+              backdropFilter: 'blur(20px) saturate(140%)',
+              boxShadow: '0 20px 45px -25px rgba(0,0,0,0.95)',
+              borderRadius: '12px',
+            },
+            success: { iconTheme: { primary: '#34d399', secondary: '#070a12' } },
+            error: { iconTheme: { primary: '#fb7185', secondary: '#070a12' } },
           }}
         />
       </NotificationProvider>

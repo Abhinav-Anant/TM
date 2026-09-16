@@ -1,67 +1,52 @@
-import React from 'react'
-import { use } from 'react'
+import React from 'react';
+import { tilt } from '../../utils/tilt';
+import { statusFill, statusText } from '../../utils/data';
+
+const StatCell = ({ label, count, status }) => (
+    <div className="flex-1 panel-sunken rounded-lg px-3 py-2.5">
+        <div className="flex items-center gap-1.5">
+            <span className={`w-1.5 h-1.5 rounded-full ${statusFill(status)}`} />
+            <span className={`font-display text-lg num ${statusText(status)}`}>{count}</span>
+        </div>
+        <p className="text-[11px] text-dusk mt-0.5">{label}</p>
+    </div>
+);
 
 const UserCard = ({ userInfo }) => {
-    return (
-        <div className='user-card p-2'>
-            <div className='flex items-center justify-between'>
-                <div className='flex items-center gap-3 '>
-                    <img src={userInfo?.profileImageUrl} alt={`${userInfo?.name}'s avatar`}
+    const initial = (userInfo?.name || '?').trim().charAt(0).toUpperCase();
 
-                        className='w-12 h-12 rounded-full border-2 border-white'
-                    />
-                    <div>
-                        <p className='text-sm font-medium'>{userInfo?.name} </p>
-                        <p className='text-xs text-gray-500'>{userInfo?.email} </p>
+    return (
+        <div className="panel tilt relative overflow-hidden p-4" {...tilt}>
+            <span className="tilt-gloss" />
+
+            <div className="relative tilt-layer">
+                <div className="flex items-center gap-3">
+                    {userInfo?.profileImageUrl ? (
+                        <img
+                            src={userInfo.profileImageUrl}
+                            alt=""
+                            className="w-11 h-11 rounded-full object-cover border border-white/12"
+                        />
+                    ) : (
+                        <div className="w-11 h-11 rounded-full grid place-items-center bg-deck border border-white/10 font-display text-ice">
+                            {initial}
+                        </div>
+                    )}
+
+                    <div className="min-w-0">
+                        <p className="text-sm font-medium text-beam truncate">{userInfo?.name}</p>
+                        <p className="text-xs text-dusk truncate">{userInfo?.email}</p>
                     </div>
                 </div>
 
+                <div className="flex items-stretch gap-2 mt-4">
+                    <StatCell label="Pending" count={userInfo?.pendingTasks || 0} status="Pending" />
+                    <StatCell label="In progress" count={userInfo?.inProgressTasks || 0} status="In Progress" />
+                    <StatCell label="Completed" count={userInfo?.completedTasks || 0} status="Completed" />
+                </div>
             </div>
-
-            <div className='flex items-end gap-3 mt-5'>
-                <StatCard
-                    label="Pending"
-                    count={userInfo?.pendingTasks || 0}
-                    status="Pending"
-
-                />
-                <StatCard
-                    label="In Progress"
-                    count={userInfo?.inProgressTasks || 0}
-                    status="In Progress"
-
-                />
-                <StatCard
-                    label="Completed"
-                    count={userInfo?.completedTasks || 0}
-                    status="Completed"
-
-                />
-            </div>
-        </div>
-    )
-}
-
-export default UserCard;
-
-
-
-const StatCard = ({ label, count, status }) => {
-    const getStatusTagColor = () => {
-        switch (status) {
-            case "In Progress":
-                return "text-cyan-500 bg-gray-50";
-            case "Pending":
-                return "text-indigo-500 bg-gray-50";
-            default:
-                return "text-violet-500 bg-gray-50";
-        }
-    };
-
-    return (
-        <div className={`flex-1 text-[10px] font-medium ${getStatusTagColor()} px-4 py-2 rounded border`}>
-            <span className='text-[12px] font-semibold'>{count}</span>
-            <div className="text-[10px]">{label}</div>
         </div>
     );
 };
+
+export default UserCard;

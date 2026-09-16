@@ -1,26 +1,26 @@
-import React from 'react'
+import React from 'react';
 
-const AvatarGroup = ({ avatars, maxVisible=3 }) => {
+const AvatarGroup = ({ avatars = [], maxVisible = 3 }) => {
+    const overflow = avatars.length - maxVisible;
+
     return (
-        <div className='flex items-center'>
+        <div className="flex items-center">
             {avatars.slice(0, maxVisible).map((avatar, index) => (
-                <img src={avatar} alt={avatar}
-                    key={index}
-                    className='w-9 h-9 rounded-full border-2 border-white -ml-3 first:ml-0'
+                <img
+                    src={avatar}
+                    alt=""
+                    key={`${avatar}_${index}`}
+                    className="w-8 h-8 rounded-full object-cover bg-deck border-2 border-hull -ml-2.5 first:ml-0"
                 />
             ))}
 
-            {
-                avatars.length > maxVisible && (
-                    <div className='w-9 h-9 flex items-center justify-center bg-blue-50 text-sm font-medium rounded-full border-2 border-white -ml-3 '>
-
-                        +(avatars.length-maxVisible)
-                    </div>
-                )
-            }
-
+            {overflow > 0 && (
+                <div className="w-8 h-8 grid place-items-center bg-deck text-ice text-[11px] font-medium rounded-full border-2 border-hull -ml-2.5 num">
+                    +{overflow}
+                </div>
+            )}
         </div>
-    )
-}
+    );
+};
 
-export default AvatarGroup
+export default AvatarGroup;

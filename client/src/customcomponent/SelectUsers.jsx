@@ -50,7 +50,7 @@ const SelectUsers = ({ selectedUsers, setSelectedUsers }) => {
     <div className="space-y-4 mt-2">
       {/* Display add members button or selected avatars */}
       {selectedUserAvatars.length === 0 ? (
-        <button className="card-btn" onClick={() => setIsModalOpen(true)}>
+        <button type="button" className="btn btn-sm" onClick={() => setIsModalOpen(true)}>
           <LuUsers className="text-sm" /> Add Members
         </button>
       ) : (
@@ -60,36 +60,36 @@ const SelectUsers = ({ selectedUsers, setSelectedUsers }) => {
       )}
 
       {/* Modal to select users */}
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Select Users">
-        <div className="space-y-4 h-[60vh] overflow-y-auto">
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Assign people">
+        <div className="space-y-1 max-h-[55vh] overflow-y-auto -mx-1 px-1">
           {allUsers.length > 0 ? (
             allUsers.map((user) => (
-              <div key={user._id} className="flex items-center gap-4 p-3 border-b border-gray-200">
-                <img src={user.profileImageUrl} alt={user.name} className="w-10 h-10 rounded-full" />
+              <div key={user._id} className="flex items-center gap-4 p-3 rounded-lg hover:bg-white/5 transition-colors">
+                <img src={user.profileImageUrl} alt={user.name} className="w-10 h-10 rounded-full object-cover bg-deck border border-white/10" />
                 <div className="flex-1">
-                  <p className="font-medium text-gray-800 dark:text-white">{user.name}</p>
-                  <p className="text-[13px] text-gray-500">{user.email}</p>
+                  <p className="text-sm font-medium text-beam">{user.name}</p>
+                  <p className="text-xs text-dusk">{user.email}</p>
                 </div>
                 <input
                   type="checkbox"
                   checked={tempSelectedUsers.includes(user._id)}
                   onChange={() => toggleUserSelection(user._id)}
-                  className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded-sm outline-none"
+                  className="w-4 h-4 rounded-sm shrink-0"
                 />
               </div>
             ))
           ) : (
-            <p className="text-center text-gray-500">No users found.</p>
+            <p className="text-center text-dusk py-8">No users found.</p>
           )}
         </div>
 
         {/* Modal footer with action buttons */}
-        <div className="flex justify-end gap-4 pt-4">
-          <button className="card-btn" onClick={() => setIsModalOpen(false)}>
-            CANCEL
+        <div className="flex justify-end gap-3 pt-5 mt-2 border-t border-white/8">
+          <button className="btn" onClick={() => setIsModalOpen(false)}>
+            Cancel
           </button>
-          <button className="card-btn-fill" onClick={handleAssign}>
-            DONE
+          <button className="btn btn-primary" onClick={handleAssign}>
+            Done
           </button>
         </div>
       </Modal>

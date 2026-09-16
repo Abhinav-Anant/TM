@@ -1,68 +1,62 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { LuUser, LuUpload, LuTrash } from 'react-icons/lu';
 
 const ProfilePhotoSelector = ({ image, setImage }) => {
     const inputRef = useRef(null);
     const [previewUrl, setPreviewUrl] = useState(null);
 
-    const handleChange = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            setImage(file);
-
-            // generate preview URL from file
-            const preview = URL.createObjectURL(file);
-            setPreviewUrl(preview);
+    // Object URLs are a leak if nobody revokes them.
+    useEffect(() => {
+        if (!image) {
+            setPreviewUrl(null);
+            return undefined;
         }
-    };
-
-    const handleRemoveImage = () => {
-        setImage(null);
-        setPreviewUrl(null);
-    };
-
-    const onChooseFile = () => {
-        inputRef.current.click();
-    };
+        const url = URL.createObjectURL(image);
+        setPreviewUrl(url);
+        return () => URL.revokeObjectURL(url);
+    }, [image]);
 
     return (
-        <div className='flex justify-center mb-6'>
+        <div className="flex justify-center mb-7">
             <input
                 type="file"
-                accept="image/*"  
+                accept="image/*"
                 ref={inputRef}
-                onChange={handleChange}
-                className='hidden'
+                onChange={(e) => setImage(e.target.files?.[0] || null)}
+                className="hidden"
             />
 
-            {!image ? (
-                <div className='w-20 h-20 flex items-center justify-center bg-blue-100/50 rounded-full relative cursor-pointer'>
-                    <LuUser className='text-4xl text-blue-600' />
-
-                    <button
-                        className='w-8 h-8 flex items-center justify-center bg-blue-600 text-white rounded-full absolute -bottom-1 -right-1 cursor-pointer '
-                        type='button'
-                        onClick={onChooseFile}
-                    >
-                        <LuUpload />
-                    </button>
-                </div>
-            ) : (
-                <div className="relative">
+            <div className="relative">
+                {previewUrl ? (
                     <img
                         src={previewUrl}
-                        alt="profile photo"
-                        className='w-20 h-20 rounded-full object-cover'
+                        alt="Your profile photo"
+                        className="w-20 h-20 rounded-full object-cover border border-white/15"
                     />
+                ) : (
                     <button
-                        className='w-8 h-8 flex items-center justify-center bg-red-500 text-white rounded-full absolute -bottom-1 -right-1'
-                        type='button'
-                        onClick={handleRemoveImage}
+                        type="button"
+                        onClick={() => inputRef.current?.click()}
+                        className="w-20 h-20 grid place-items-center rounded-full panel-sunken text-ice cursor-pointer hover:text-signal transition-colors"
+                        aria-label="Add a profile photo"
                     >
-                        <LuTrash />
+                        <LuUser className="text-3xl" />
                     </button>
-                </div>
-            )}
+                )}
+
+                <button
+                    type="button"
+                    onClick={() => (previewUrl ? setImage(null) : inputRef.current?.click())}
+                    aria-label={previewUrl ? 'Remove photo' : 'Choose a photo'}
+                    className={`absolute -bottom-1 -right-1 w-8 h-8 grid place-items-center rounded-full cursor-pointer transition-colors ${
+                        previewUrl
+                            ? 'bg-alert/20 text-alert border border-alert/40 hover:bg-alert/30'
+                            : 'bg-signal text-void hover:brightness-110'
+                    }`}
+                >
+                    {previewUrl ? <LuTrash /> : <LuUpload />}
+                </button>
+            </div>
         </div>
     );
 };

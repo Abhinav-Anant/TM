@@ -1,28 +1,28 @@
-import React from 'react'
+import React from 'react';
+import { statusFill, statusText } from '../../utils/data';
 
-const Progress = ({ progress, status }) => {
-    const getColor = () => {
-        switch (status) {
-            case 'In Progress':
-                return 'text-cyan-500 bg-cyan-500 border border-cyan-500/10'
-
-            case 'Completed':
-                return 'text-indigo-500 bg-indigo-500 border border-indigo-500/10'
-
-            default:
-                return 'text-indigo-500 bg-indigo-500 border border-indigo-500/10'
-        }
-    }
+const Progress = ({ progress = 0, status }) => {
+    const value = Math.max(0, Math.min(100, Number(progress) || 0));
 
     return (
-        <div className='w-full bg-gray-200 rounded-full h-1.5'>
-            <div className={`${getColor()} h-1.5 rounded-full text-center text-xs font-medium `}
-                style={{ width: `${progress}%` }}
-            >
-
-            </div>
+        <div
+            className="w-full h-1.5 rounded-full bg-white/8 overflow-hidden"
+            role="progressbar"
+            aria-valuenow={value}
+            aria-valuemin={0}
+            aria-valuemax={100}
+        >
+            <div
+                className={`h-full rounded-full ${statusFill(status)} ${statusText(status)} transition-[width] duration-700 ease-out`}
+                style={{
+                    width: `${value}%`,
+                    // The bar glows in its own colour, so progress reads at a glance
+                    // even in peripheral vision.
+                    boxShadow: '0 0 12px 0 currentColor',
+                }}
+            />
         </div>
-    )
-}
+    );
+};
 
-export default Progress
+export default Progress;

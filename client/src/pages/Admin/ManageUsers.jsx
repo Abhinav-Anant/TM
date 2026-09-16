@@ -52,7 +52,7 @@ const ManageUsers = () => {
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error("Error downloading task details:", error);
-      toast.error("Failed to download task details. Please try again.");
+      toast.error("Could not build the report. Try again in a moment.");
     }
   };
 
@@ -63,7 +63,7 @@ const ManageUsers = () => {
   };
 
   const handleImport = async () => {
-    if (!csvFile) return toast.error("Please choose a CSV file.");
+    if (!csvFile) return toast.error("Choose a CSV file first.");
 
     const formData = new FormData();
     formData.append("file", csvFile);
@@ -83,7 +83,7 @@ const ManageUsers = () => {
     } catch (error) {
       const data = error.response?.data;
       if (data?.errors) setResult(data);
-      toast.error(data?.message || "Import failed. Please try again.");
+      toast.error(data?.message || "The import did not run. Check the file and try again.");
     } finally {
       setImporting(false);
     }
@@ -101,86 +101,95 @@ const ManageUsers = () => {
 
   return (
     <DashboardLayout activeMenu={user?.role === 'head' ? 'My Department' : 'Team Members'}>
-      <div className='mt-5 mb-10'>
-        <div className='flex md:flex-row md:items-center justify-between'>
-          <h2 className='text-xl md:text:xl font-medium'>
-            {user?.role === 'head' ? 'My Department' : 'Team Members'}
+      <div className='py-6'>
+        <div className='flex flex-wrap items-center justify-between gap-4'>
+          <h2 className='font-display text-2xl text-beam'>
+            {user?.role === 'head' ? 'My department' : 'Team members'}
           </h2>
 
           {/* Both the users export and the member import are org-wide, admin-only endpoints. */}
           {user?.role === 'admin' && (
             <div className='flex items-center gap-2'>
-              <button className='flex md:flex download-btn'
-                onClick={() => setOpenImport(true)}
-              >
-                <LuUpload className='text-lg' />
-                Import CSV
+              <button className='btn btn-sm' onClick={() => setOpenImport(true)}>
+                <LuUpload /> Import CSV
               </button>
 
-              <button className='flex md:flex download-btn '
-                onClick={handleDownloadReport}
-              >
-                <LuFileSpreadsheet className='text-lg' />
-                Download Report
+              <button className='btn btn-sm' onClick={handleDownloadReport}>
+                <LuFileSpreadsheet /> Download report
               </button>
             </div>
           )}
         </div>
 
-        <div className='grid grid-cols-1 md:grid-cols-3 gap-4 mt-4  '>
-          {allUsers?.map((user) => (
-            <UserCard key={user._id} userInfo={user} />
-          ))}
-        </div>
-
-
-      </div>
-
-      <Modal isOpen={openImport} onClose={closeImport} title="Import Members from CSV">
-        <p className='text-sm text-gray-600'>
-          Upload a CSV with the columns <b>name</b>, <b>email</b> and <b>password</b> (password
-          at least 6 characters), plus an optional <b>department</b> column holding an existing
-          department name. Everyone is created as a member. Emails that already exist are
-          skipped, and up to 200 rows can be imported at a time.
-        </p>
-
-        <a
-          href='/sample-members.csv'
-          download
-          className='inline-flex items-center gap-2 text-sm text-primary underline'
-        >
-          <LuDownload className='text-base' />
-          Download sample CSV
-        </a>
-
-        <input
-          type='file'
-          accept='.csv,text/csv'
-          onChange={(e) => { setCsvFile(e.target.files?.[0] || null); setResult(null); }}
-          className='block w-full text-sm border border-gray-200 rounded-lg p-2 cursor-pointer'
-        />
-
-        {result && (
-          <div className='text-sm'>
-            <p>
-              Created <b>{result.created || 0}</b> &middot; Skipped (already exist){' '}
-              <b>{result.skipped || 0}</b> &middot; Failed <b>{result.failed ?? result.errors?.length ?? 0}</b>
+        {allUsers.length > 0 ? (
+          <div className='grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mt-5'>
+            {allUsers.map((member) => (
+              <UserCard key={member._id} userInfo={member} />
+            ))}
+          </div>
+        ) : (
+          <div className='panel p-12 mt-5 text-center'>
+            <p className='text-beam'>No one here yet.</p>
+            <p className='text-sm text-mist mt-1'>
+              {user?.role === 'admin'
+                ? 'Import a CSV to add your team in one go.'
+                : 'Members assigned to your department will appear here.'}
             </p>
-            {result.errors?.length > 0 && (
-              <ul className='mt-2 max-h-40 overflow-y-auto list-disc pl-5 text-red-500'>
-                {result.errors.map((err, i) => (
-                  <li key={i}>{err.line ? `Line ${err.line}: ` : ''}{err.message}</li>
-                ))}
-              </ul>
-            )}
           </div>
         )}
+      </div>
 
-        <div className='flex justify-end gap-2'>
-          <button className='card-btn' onClick={closeImport}>Close</button>
-          <button className='add-btn' onClick={handleImport} disabled={importing}>
-            {importing ? 'Importing...' : 'Import'}
-          </button>
+      <Modal isOpen={openImport} onClose={closeImport} title="Import members from a CSV">
+        <div className='space-y-5'>
+          <p className='text-sm text-mist leading-relaxed'>
+            The file needs the columns <b className='text-beam'>name</b>,{' '}
+            <b className='text-beam'>email</b> and <b className='text-beam'>password</b> (at least
+            6 characters), plus an optional <b className='text-beam'>department</b> holding an
+            existing department name. Everyone is added as a member, emails that already exist are
+            skipped, and up to 200 rows go through at a time.
+          </p>
+
+          <a
+            href='/sample-members.csv'
+            download
+            className='inline-flex items-center gap-2 text-sm text-ice hover:text-signal underline underline-offset-4 transition-colors'
+          >
+            <LuDownload /> Download a sample CSV
+          </a>
+
+          <input
+            type='file'
+            accept='.csv,text/csv'
+            onChange={(e) => { setCsvFile(e.target.files?.[0] || null); setResult(null); }}
+            className='field cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-sm file:text-beam file:cursor-pointer'
+          />
+
+          {result && (
+            <div className='panel-sunken rounded-lg p-3.5 text-sm'>
+              <div className='flex flex-wrap gap-2'>
+                <span className='chip chip-done'>{result.created || 0} created</span>
+                <span className='chip chip-mist'>{result.skipped || 0} already existed</span>
+                <span className='chip chip-alert'>
+                  {result.failed ?? result.errors?.length ?? 0} failed
+                </span>
+              </div>
+
+              {result.errors?.length > 0 && (
+                <ul className='mt-3 max-h-40 overflow-y-auto space-y-1 text-xs text-alert'>
+                  {result.errors.map((err, i) => (
+                    <li key={i}>{err.line ? `Line ${err.line}: ` : ''}{err.message}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          <div className='flex justify-end gap-3 pt-2'>
+            <button className='btn' onClick={closeImport}>Close</button>
+            <button className='btn btn-primary' onClick={handleImport} disabled={importing}>
+              {importing ? 'Importing' : 'Import members'}
+            </button>
+          </div>
         </div>
       </Modal>
     </DashboardLayout>

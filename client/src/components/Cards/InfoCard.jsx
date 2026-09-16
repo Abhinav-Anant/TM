@@ -1,25 +1,24 @@
 import React from 'react';
+import { tilt } from '../../utils/tilt';
 
-const InfoCard = ({ icon, label, value, color }) => {
-  // Format the value with a thousands separator
-  const formattedValue = value.toLocaleString();
+/**
+ * A single reading on the panel. The value carries the weight; the colour bar
+ * is the only decoration, and it is doing work - it ties the number to the
+ * same status hue used on every card and chart.
+ */
+const InfoCard = ({ icon, label, value, color = 'bg-ice', tone = 'text-ice' }) => (
+  <div className="panel tilt relative overflow-hidden p-4" {...tilt}>
+    <span className="tilt-gloss" />
+    <span className={`absolute left-0 top-0 bottom-0 w-[3px] ${color}`} />
 
-  return (
-    <div className='flex items-center gap-3'>
-      {/* Indicator with dynamic color */}
-      <div className={`w-3 md:w-2.5 h-2.5 md:h-5 ${color} rounded-full`} />
-      {/* Icon and label */}
-      <div className='flex items-center gap-2'>
-        {icon && <div className='icon'>{icon}</div>}
-        <p className='text-xm md:text-[14px] text-gray-600 '>
-          <span className='text-sm md:text-[15px] text-black font-semibold'>
-            {formattedValue}
-          </span>
-         {" "}{label}
-        </p>
+    <div className="relative tilt-layer">
+      <div className="flex items-center gap-2 text-xs text-mist">
+        {icon && <span className={tone}>{icon}</span>}
+        <span>{label}</span>
       </div>
+      <p className="font-display text-3xl text-beam mt-2 num leading-none">{value}</p>
     </div>
-  );
-};
+  </div>
+);
 
 export default InfoCard;

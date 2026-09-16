@@ -2,109 +2,87 @@ import React from 'react';
 import moment from 'moment';
 import Progress from '../layouts/Progress';
 import AvatarGroup from '../layouts/AvatarGroup';
-import { LuPaperclip, LuMessageSquare, LuTriangleAlert } from 'react-icons/lu';
-import { categoryColor } from '../../utils/data';
+import { LuPaperclip, LuMessageSquare, LuTriangleAlert, LuCalendar } from 'react-icons/lu';
+import { categoryColor, statusChip, priorityChip, statusFill } from '../../utils/data';
+import { tilt } from '../../utils/tilt';
 
+// The card shows the due date only. Start date was on the old card, but on a
+// board you are scanning for what is late, not what began early - callers still
+// pass createdAt and the detail view still carries it.
 const TaskCard = ({
     title, description, priority,
-    status, category, progress, createdAt,
+    status, category, progress,
     dueDate, assignedTo, attachmentCount, commentCount,
     completedTodoCount, todoChecklist, onClick
 }) => {
-
-    const getStatusTagColor = (status) => {
-        switch (status) {
-            case "In Progress":
-                return "text-cyan-500 bg-cyan-50 border border-cyan-500/10";
-            case "Completed":
-                return "text-lime-500 bg-lime-50 border border-lime-500/20";
-            default:
-                return "text-violet-500 bg-violet-50 border border-violet-500/10";
-        }
-    };
-
-    const getPriorityTagColor = (priority) => {
-        switch (priority) {
-            case "Low":
-                return "text-emerald-500 bg-emerald-50 border border-emerald-500/10";
-            case "Medium":
-                return "text-amber-500 bg-amber-50 border border-amber-500/10";
-            default:
-                return "text-rose-500 bg-rose-50 border border-rose-500/10";
-        }
-    };
-
-    const formattedStartDate = createdAt ? moment(createdAt).format("Do MMM YYYY") : 'N/A';
-    const formattedDueDate = dueDate ? moment(dueDate).format("Do MMM YYYY") : 'N/A';
+    const formattedDueDate = dueDate ? moment(dueDate).format("D MMM YYYY") : 'No due date';
     const totalTodoChecklistLength = todoChecklist?.length || 0;
     const isOverdue = status !== "Completed" && dueDate && moment(dueDate).isBefore(moment(), 'day');
 
     return (
-        <div
-            className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200 mb-4 cursor-pointer"
+        <article
+            className="panel tilt relative overflow-hidden cursor-pointer text-left flex flex-col"
             onClick={onClick}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); } }}
+            role="button"
+            tabIndex={0}
+            {...tilt}
         >
-            <div className="flex flex-wrap gap-2 p-4">
-                <div className={`text-[11px] font-medium ${getStatusTagColor(status)} px-4 py-0.5 rounded`}>
-                    {status}
-                </div>
-                <div className={`text-[11px] font-medium ${getPriorityTagColor(priority)} px-4 py-0.5 rounded`}>
-                    {priority} Priority
-                </div>
-                {category && (
-                    <div className={`text-[11px] font-medium border px-3 py-0.5 rounded ${categoryColor(category)}`}>
-                        {category}
-                    </div>
-                )}
-            </div>
+            <span className="tilt-gloss" />
 
-            <div className={`px-4 py-3 border-l-4 ${status === "In Progress"
-                ? 'border-cyan-500'
-                : status === 'Completed'
-                    ? 'border-lime-500'
-                    : 'border-violet-500'
-                }`}>
-                <h3 className="text-xl font-semibold text-gray-800">{title}</h3>
-                <p className="text-sm text-gray-600 mt-2 line-clamp-2">{description}</p>
-                <p className="text-sm text-gray-600 mt-2">
-                    Task Done {' '}
-                    <span className="font-bold">{completedTodoCount}/{totalTodoChecklistLength}</span>
-                </p>
-                <Progress progress={progress} status={status} />
-            </div>
+            {/* The status reads as a lit edge down the side of the pane, so a
+                board can be scanned by colour without reading a single label. */}
+            <span className={`absolute left-0 top-0 bottom-0 w-[3px] ${statusFill(status)} opacity-80`} />
 
-            <div className="flex justify-between p-4 bg-gray-50">
-                <div className="space-y-2">
-                    <div>
-                        <label className="block text-xs font-medium text-gray-500">Start date</label>
-                        <p className="text-sm font-semibold text-gray-700">{formattedStartDate}</p>
-                    </div>
-                    <div>
-                        <label className="block text-xs font-medium text-gray-500">Due date</label>
-                        <p className={`text-sm font-semibold flex items-center gap-1 ${isOverdue ? 'text-rose-600' : 'text-gray-700'}`}>
-                            {isOverdue && <LuTriangleAlert className="text-xs" title="Overdue" />}
-                            {formattedDueDate}
-                        </p>
-                    </div>
-                </div>
-
-                <div className="flex items-center space-x-4">
-                    <AvatarGroup avatars={assignedTo || []} />
-                    {commentCount > 0 && (
-                        <div className="flex items-center space-x-1">
-                            <LuMessageSquare className="text-gray-600" />
-                            <span className="text-sm text-gray-700">{commentCount}</span>
-                        </div>
-                    )}
-                    {attachmentCount > 0 && (
-                        <div className="flex items-center space-x-1">
-                            <LuPaperclip className="text-gray-600" />
-                            <span className="text-sm text-gray-700">{attachmentCount}</span>
-                        </div>
+            <div className="relative p-5 flex flex-col gap-4 grow tilt-layer">
+                <div className="flex flex-wrap items-center gap-2">
+                    <span className={`chip ${statusChip(status)}`}>{status}</span>
+                    <span className={`chip ${priorityChip(priority)}`}>{priority}</span>
+                    {category && (
+                        <span className={`chip border ${categoryColor(category)}`}>{category}</span>
                     )}
                 </div>
+
+                <div>
+                    <h3 className="font-display text-lg text-beam leading-snug line-clamp-2">{title}</h3>
+                    {description && (
+                        <p className="text-sm text-mist mt-1.5 line-clamp-2 leading-relaxed">{description}</p>
+                    )}
+                </div>
+
+                <div className="mt-auto">
+                    <div className="flex items-baseline justify-between text-xs mb-2">
+                        <span className="text-dusk">
+                            <span className="text-beam font-medium num">{completedTodoCount}</span>
+                            <span className="text-dusk"> / {totalTodoChecklistLength} done</span>
+                        </span>
+                        <span className="text-mist num">{progress ?? 0}%</span>
+                    </div>
+                    <Progress progress={progress} status={status} />
+                </div>
+
+                <div className="flex items-center justify-between gap-3 pt-3 border-t border-white/8">
+                    <div className={`flex items-center gap-1.5 text-xs ${isOverdue ? 'text-alert' : 'text-dusk'}`}>
+                        {isOverdue ? <LuTriangleAlert className="shrink-0" /> : <LuCalendar className="shrink-0" />}
+                        <span className="num">{formattedDueDate}</span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                        {commentCount > 0 && (
+                            <span className="flex items-center gap-1 text-xs text-dusk">
+                                <LuMessageSquare /> <span className="num">{commentCount}</span>
+                            </span>
+                        )}
+                        {attachmentCount > 0 && (
+                            <span className="flex items-center gap-1 text-xs text-dusk">
+                                <LuPaperclip /> <span className="num">{attachmentCount}</span>
+                            </span>
+                        )}
+                        <AvatarGroup avatars={assignedTo || []} />
+                    </div>
+                </div>
             </div>
-        </div>
+        </article>
     );
 };
 

@@ -43,14 +43,14 @@ const TaskComments = ({ taskId, comments = [], onChange }) => {
         user?.role === "admin" || comment.user?._id === user?._id;
 
     return (
-        <div className="mt-6 pt-5 border-t border-gray-100">
-            <label className="flex items-center gap-2 text-xs font-medium text-slate-500">
+        <div className="mt-8 pt-6 border-t border-white/8">
+            <label className="flex items-center gap-2 text-xs font-medium text-mist">
                 <LuMessageSquare /> Comments ({comments.length})
             </label>
 
             <div className="mt-3 space-y-3">
                 {comments.length === 0 && (
-                    <p className="text-[13px] text-gray-400">No comments yet. Start the conversation.</p>
+                    <p className="text-sm text-dusk">No comments yet. Start the conversation.</p>
                 )}
 
                 {comments.map((comment) => (
@@ -59,25 +59,25 @@ const TaskComments = ({ taskId, comments = [], onChange }) => {
                             <img
                                 src={comment.user.profileImageUrl}
                                 alt=""
-                                className="w-8 h-8 rounded-full object-cover shrink-0 bg-slate-200"
+                                className="w-8 h-8 rounded-full object-cover shrink-0 bg-deck border border-white/10"
                             />
                         ) : (
-                            <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 text-xs font-semibold flex items-center justify-center shrink-0">
+                            <div className="w-8 h-8 rounded-full bg-deck border border-white/10 text-ice text-xs font-semibold grid place-items-center shrink-0">
                                 {initials(comment.user?.name)}
                             </div>
                         )}
 
-                        <div className="flex-1 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                        <div className="flex-1 panel-sunken rounded-lg px-3.5 py-2.5">
                             <div className="flex items-center justify-between gap-2">
-                                <p className="text-[13px] font-medium text-gray-800">
+                                <p className="text-[13px] font-medium text-beam">
                                     {comment.user?.name || "Unknown"}
-                                    <span className="ml-2 text-[11px] font-normal text-gray-400">
+                                    <span className="ml-2 text-[11px] font-normal text-dusk">
                                         {moment(comment.createdAt).fromNow()}
                                     </span>
                                 </p>
                                 {canDelete(comment) && (
                                     <button
-                                        className="text-gray-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 cursor-pointer"
+                                        className="text-dusk hover:text-alert opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity cursor-pointer"
                                         aria-label="Delete comment"
                                         onClick={() => remove(comment._id)}
                                     >
@@ -85,7 +85,7 @@ const TaskComments = ({ taskId, comments = [], onChange }) => {
                                     </button>
                                 )}
                             </div>
-                            <p className="text-[13px] text-gray-700 mt-1 whitespace-pre-wrap break-words">
+                            <p className="text-[13px] text-mist mt-1 whitespace-pre-wrap break-words leading-relaxed">
                                 {comment.text}
                             </p>
                         </div>
@@ -101,12 +101,12 @@ const TaskComments = ({ taskId, comments = [], onChange }) => {
                     onChange={(e) => setText(e.target.value)}
                     placeholder="Write a comment..."
                     aria-label="Write a comment"
-                    className="flex-1 text-sm text-black outline-none bg-white border border-slate-200 rounded-md px-3 py-2 resize-y focus:ring-2 focus:ring-blue-200"
+                    className="field flex-1 resize-y"
                 />
                 <button
                     type="submit"
                     disabled={posting || !text.trim()}
-                    className="flex items-center gap-2 text-sm text-white bg-blue-600 px-4 py-2.5 rounded-md hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                    className="btn btn-primary shrink-0"
                 >
                     <LuSend /> {posting ? "Posting" : "Post"}
                 </button>

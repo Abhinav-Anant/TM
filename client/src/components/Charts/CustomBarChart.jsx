@@ -1,55 +1,49 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList,
 } from 'recharts';
+import CustomTooltip from './CustomTooltip';
+import { PRIORITY_CHART_COLORS, CHART_INK } from '../../utils/data';
 
-const CustomBarChart = ({ data }) => {
-  const [activeIndex, setActiveIndex] = useState(null);
-
-  const priorityColorMap = {
-    Low: '#00BC7D',
-    Medium: '#FE9900',
-    High: '#FF1F57',
-  };
-
-  const CustomTooltip = ({ active, payload }) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-white shadow-md rounded-lg p-2 border border-gray-300 text-purple-800 mb-1">
-          <p className="text-xs font-semibold">{payload[0].payload.priority}</p>
-          <p className="text-sm text-gray-600">
-            Count: <span className="font-medium text-gray-900">{payload[0].payload.count}</span>
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
+const CustomBarChart = ({ data = [] }) => {
+  if (data.length === 0) {
+    return <p className="text-sm text-dusk py-16 text-center">No tasks to chart yet.</p>;
+  }
 
   return (
-    <div className="bg-white mt-6">
-      <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={data}>
-          <CartesianGrid stroke="none" />
-          <XAxis dataKey="priority" tick={{ fontSize: 12 }} stroke="none" />
-          <YAxis tick={{ fontSize: 12 }} stroke="none" allowDecimals={false} />
-          <Tooltip content={<CustomTooltip />} cursor={{ fill: "transparent" }} />
-          <Bar
+    <ResponsiveContainer width="100%" height={280}>
+      <BarChart data={data} margin={{ top: 24, right: 8, left: -24, bottom: 0 }}>
+        {/* Horizontal rules only - vertical ones fight the bars they sit behind. */}
+        <CartesianGrid vertical={false} stroke={CHART_INK.grid} />
+        <XAxis
+          dataKey="priority"
+          tick={{ fontSize: 12, fill: CHART_INK.label }}
+          tickLine={false}
+          axisLine={{ stroke: CHART_INK.grid }}
+        />
+        <YAxis
+          tick={{ fontSize: 11, fill: CHART_INK.label }}
+          tickLine={false}
+          axisLine={false}
+          allowDecimals={false}
+          width={44}
+        />
+        <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(148,178,255,0.05)' }} />
+        <Bar dataKey="count" name="Tasks" radius={[4, 4, 0, 0]} maxBarSize={56}>
+          {data.map((entry) => (
+            <Cell key={entry.priority} fill={PRIORITY_CHART_COLORS[entry.priority] || '#0369a1'} />
+          ))}
+          {/* Three bars is few enough to label every one directly - and it is
+              the secondary encoding the priority palette relies on. */}
+          <LabelList
             dataKey="count"
-            radius={[10, 10, 0, 0]}
-            onMouseEnter={(_, index) => setActiveIndex(index)}
-            onMouseLeave={() => setActiveIndex(null)}
-          >
-            {data.map((entry, index) => (
-              <Cell
-                key={index}
-                fill={activeIndex === index ? '#22C55E' : priorityColorMap[entry.priority] || '#00BC7D'}
-              />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
+            position="top"
+            offset={8}
+            style={{ fill: '#eaf1ff', fontSize: 12 }}
+          />
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
   );
 };
 

@@ -8,108 +8,95 @@ import { UserContext } from '../../context/userContext';
 import { homeFor } from '../../utils/roles';
 
 const Login = () => {
-  // State hooks for managing form inputs and error messages
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState(null)
+  const [submitting, setSubmitting] = useState(false)
 
   const { updatedUser } = useContext(UserContext)
-
-  // Hook for navigation after successful login
   const navigate = useNavigate();
 
-  // Function to handle form submission for login
   const handleLogin = async (e) => {
-    e.preventDefault(); // Prevent the default form submission behavior
+    e.preventDefault();
 
-    // Basic validation checks for email and password fields
     if (!email) {
-      setError("Email is required.");
+      setError("Enter your email address.");
       return;
     }
     if (!password) {
-      setError("Please enter the password.");
+      setError("Enter your password.");
       return;
     }
 
-    // Regex to validate the email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      setError("Please enter a valid email address.");
+      setError("That email address is not valid.");
       return;
     }
 
-    setError(''); // Clear any previous error messages
+    setError('');
+    setSubmitting(true);
 
     try {
-      // Making an API call to the login endpoint with email and password
       const response = await axiosInstance.post(API_PATHS.AUTH.LOGIN, {
         email,
         password,
       });
 
-      const { token, role } = response.data; // Destructuring response data
+      const { token, role } = response.data;
       updatedUser(response.data)
       if (token) {
-        localStorage.setItem("token", token); // Storing the token in localStorage
-
-        // Redirect to the section that belongs to this role.
+        localStorage.setItem("token", token);
         navigate(homeFor({ role }));
-
-
       }
     } catch (error) {
-      // Handle errors from the API request
       if (error.response && error.response.data.message) {
         setError(error.response.data.message)
       } else {
         console.error("Login failed:", error);
-        setError("Something went wrong.Please try again.");
+        setError("Could not reach the server. Check your connection and try again.");
       }
+    } finally {
+      setSubmitting(false);
     }
   }
 
   return (
     <AuthLayout>
-      <div className='lg:w-[70%] h-3/4 md:h-full flex flex-col justify-center'>
-        <h3 className='text-xl font-semibold text-black'>
-          Welcome Back
-        </h3>
-        <p className='text-xs text-slate-700 mt-[5px] mb-6'>
-          Please enter your details to log in
-        </p>
+      <div className="w-full max-w-sm">
+        <h2 className="font-display text-3xl text-beam">Sign in</h2>
+        <p className="text-sm text-mist mt-2 mb-8">Use the email address your team uses.</p>
 
-        {/* Login form */}
-        <form onSubmit={handleLogin}>
+        <form onSubmit={handleLogin} noValidate>
           <Input
             value={email}
-            onChange={({ target }) => setEmail(target.value)} // Update email state on input change
-            label="Email Address"
-            placeholder="john@example.com"
-            type="text"
+            onChange={({ target }) => setEmail(target.value)}
+            label="Email address"
+            placeholder="you@company.com"
+            type="email"
           />
           <Input
             label="Password"
             value={password}
-            onChange={({ target }) => setPassword(target.value)} // Update password state on input change
-            placeholder="Min 8 Characters"
+            onChange={({ target }) => setPassword(target.value)}
+            placeholder="Your password"
             type="password"
           />
-          {error && <p className="text-red-500 text-xs pb-2.5">{error}</p>} {/* Show error message if any */}
 
-          {/* Submit button */}
-          <button
-            type='submit'
-            className='w-full text-sm font-medium text-white bg-black shadow-lg shadow-purple-600/5 p-[10px] rounded-md my-1 hover:bg-blue-600/15 hover:text-blue-600 cursor-pointer'
-          >
-            LOGIN
+          {error && (
+            <p role="alert" className="chip chip-alert w-full justify-start mb-4">
+              {error}
+            </p>
+          )}
+
+          <button type="submit" className="btn btn-primary w-full" disabled={submitting}>
+            {submitting ? 'Signing in' : 'Sign in'}
           </button>
 
-          {/* Link to sign-up page */}
-          <p>
-            Don't have an account?{' '}
-            <Link className='font-medium text-blue-600 underline' to='/signup'>
-              SignUp
+          <p className="text-sm text-mist mt-6">
+            No account yet?{' '}
+            <Link className="text-signal hover:underline underline-offset-4" to="/signup">
+              Create one
             </Link>
           </p>
         </form>

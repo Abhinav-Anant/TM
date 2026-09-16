@@ -7,21 +7,17 @@ import { UserContext } from '../../context/userContext';
 import { homeFor } from '../../utils/roles';
 import axiosInstance from "../../utils/axiosInstance";
 import uploadImage from '../../utils/uploadImage';
-import {API_PATHS} from '../../utils/apiPaths'
-
-
-
-
+import { API_PATHS } from '../../utils/apiPaths';
 
 const SignUp = () => {
-
   const [profilePic, setProfilePic] = useState(null);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [adminInviteToken, setAdminInviteToken] = useState('');
   const [error, setError] = useState('');
-  const { updatedUser } = useContext(UserContext)
+  const [submitting, setSubmitting] = useState(false);
+  const { updatedUser } = useContext(UserContext);
   const navigate = useNavigate();
 
   const handleSignUp = async (e) => {
@@ -30,42 +26,33 @@ const SignUp = () => {
     let profileImageUrl = '';
 
     if (!fullName) {
-      setError("Please enter full name.");
+      setError("Enter your full name.");
       return;
     }
     if (!email) {
-      setError("Please enter your email.");
+      setError("Enter your email address.");
       return;
     }
     if (!password) {
-      setError("Please enter the password.");
+      setError("Choose a password.");
       return;
     }
 
-    // Optionally, you could add a regex to validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      setError("Please enter a valid email address.");
+      setError("That email address is not valid.");
       return;
     }
 
-    // Clear the error if everything is valid
     setError('');
-
-    // Handle the API call for signing up here
-    // You might want to add a successful sign-up action, e.g., redirect to the login page
-    // navigate('/login'); // example of redirecting after successful sign up
+    setSubmitting(true);
 
     try {
-
-      if(profilePic){
-        const imgUploadRes=await uploadImage(profilePic);
-        profileImageUrl=imgUploadRes.imageUrl || '';
+      if (profilePic) {
+        const imgUploadRes = await uploadImage(profilePic);
+        profileImageUrl = imgUploadRes.imageUrl || '';
       }
 
-
-
-      // Making an API call to the Registration failed endpoint with email and password
       const response = await axiosInstance.post(API_PATHS.AUTH.REGISTER, {
         name: fullName,
         email,
@@ -80,81 +67,76 @@ const SignUp = () => {
         updatedUser(response.data)
       }
       navigate(homeFor({ role }));
-
-
-
     } catch (error) {
-      // Handle errors from the API request
       if (error.response && error.response.data.message) {
         setError(error.response.data.message)
       } else {
-        console.error("Registration failed failed:", error);
-        setError("Something went wrong.Please try again.");
+        console.error("Registration failed:", error);
+        setError("Could not reach the server. Check your connection and try again.");
       }
+    } finally {
+      setSubmitting(false);
     }
-
-
-
   };
 
   return (
     <AuthLayout>
-      <div className='lg:w- [100%] h-auto md:h-full mt-10 md:mt-0 flex flex-col justify-center'>
-        <h3 className='text-xl font-semibold text-black'>Create an Account</h3>
-        <p className='text-xs text-slate-700 mt-[5px] mb-6'>Join us today by entering your details below</p>
+      <div className="w-full max-w-lg">
+        <h2 className="font-display text-3xl text-beam">Create your account</h2>
+        <p className="text-sm text-mist mt-2 mb-8">
+          You will land on your own dashboard as soon as this is done.
+        </p>
 
-        <form onSubmit={handleSignUp}>
-
+        <form onSubmit={handleSignUp} noValidate>
           <ProfilePhotoSelector image={profilePic} setImage={setProfilePic} />
 
-          <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5">
             <Input
               value={fullName}
               onChange={({ target }) => setFullName(target.value)}
-              label="Full Name"
-              placeholder="John"
+              label="Full name"
+              placeholder="Jordan Mehta"
               type="text"
             />
             <Input
-              label="Email"
+              label="Email address"
               value={email}
               onChange={({ target }) => setEmail(target.value)}
-              placeholder="john@example.com"
-              type="text"
+              placeholder="you@company.com"
+              type="email"
             />
             <Input
               label="Password"
               value={password}
               onChange={({ target }) => setPassword(target.value)}
-              placeholder="Min 8 Characters"
+              placeholder="At least 8 characters"
               type="password"
             />
             <Input
-              label="Admin Invite Token"
+              label="Admin invite code"
               value={adminInviteToken}
               onChange={({ target }) => setAdminInviteToken(target.value)}
-              placeholder="6 Digit Code"
-              type="number"
+              placeholder="Leave blank to join as a member"
+              type="text"
             />
           </div>
-          {error && <p className="text-red-500 text-xs pb-2.5">{error}</p>}
 
-          <button
-            type='submit'
-            className='w-full text-sm font-medium text-white bg-black shadow-lg shadow-purple-600/5 p-[10px] rounded-md my-1 hover:bg-blue-600/15 hover:text-blue-600 cursor-pointer'
-          >
-            SIGN UP
+          {error && (
+            <p role="alert" className="chip chip-alert w-full justify-start mb-4">
+              {error}
+            </p>
+          )}
+
+          <button type="submit" className="btn btn-primary w-full" disabled={submitting}>
+            {submitting ? 'Creating account' : 'Create account'}
           </button>
 
-          <p>
-            Already an account?{' '}
-            <Link className='font-medium text-blue-600 underline' to='/login' >Loginin</Link>
+          <p className="text-sm text-mist mt-6">
+            Already have an account?{' '}
+            <Link className="text-signal hover:underline underline-offset-4" to="/login">
+              Sign in
+            </Link>
           </p>
-
-
-
-
-
         </form>
       </div>
     </AuthLayout>

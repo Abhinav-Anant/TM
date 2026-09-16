@@ -1,6 +1,5 @@
 import React, { useContext } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
-import HashLoader from 'react-spinners/HashLoader';
 import { UserContext } from '../context/userContext';
 import { homeFor } from '../utils/roles';
 
@@ -17,8 +16,11 @@ const PrivateRoute = ({ allowedRoles }) => {
   // signed-in user to /login on every page refresh.
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-screen">
-        <HashLoader color="#6366F1" size={70} />
+      <div className="grid place-items-center h-dvh" role="status" aria-label="Loading">
+        {/* The same lit aperture as the navbar mark, breathing. */}
+        <span className="relative grid place-items-center w-14 h-14 rounded-2xl panel">
+          <span className="w-3 h-3 rounded-full bg-signal animate-pulse shadow-[0_0_20px_4px_rgba(255,176,32,0.6)]" />
+        </span>
       </div>
     );
   }
