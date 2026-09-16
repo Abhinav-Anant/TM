@@ -14,6 +14,7 @@ import ViewTaskDetails from './pages/User/ViewTaskDetails';
 import CalendarView from './pages/CalendarView';
 import Leads from './pages/Sales/Leads';
 import LeadDetail from './pages/Sales/LeadDetail';
+import SalesDashboard from './pages/Sales/SalesDashboard';
 import Analytics from './pages/Analytics';
 import Profile from './pages/Profile';
 import UserProvider, { UserContext } from './context/userContext';
@@ -65,6 +66,7 @@ const App = () => {
                 {/* Sales: open to any signed-in user - the API scopes every
                     response, so a member outside Sales just sees an empty
                     pipeline. Hiding the nav link is a UI concern, not a guard. */}
+                <Route path="/sales" element={<SalesDashboard />} />
                 <Route path="/sales/leads" element={<Leads />} />
                 <Route path="/sales/leads/:id" element={<LeadDetail />} />
                 <Route path="/analytics" element={<Analytics />} />
