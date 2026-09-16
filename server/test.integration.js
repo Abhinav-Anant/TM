@@ -820,6 +820,31 @@ const waitForServer = async () => {
         assert.ok(wa.received.some((m) => m.to === "919876511111" && /ABC Industries/.test(m.text)),
             "assigning a lead notifies the owner over the existing WhatsApp path");
 
+        // Scope: a rep sees only their own leads, a head sees the department,
+        // an admin sees everything.
+        const repList = await call("GET", "/api/leads", { token: R });
+        assert.ok(repList.body.leads.every((l) => String(l.owner._id) === String(rep._id)),
+            "a member sees only leads they own");
+        assert.strictEqual(repList.body.leads.length, 2, "the rep owns their own lead plus the one the head assigned");
+
+        const headList = await call("GET", "/api/leads", { token: CH });
+        assert.strictEqual(headList.body.leads.length, 3, "a head sees the whole department");
+
+        // The escalation attempt: a query parameter must not widen scope.
+        const widened = await call("GET", "/api/leads?owner=" + rival._id, { token: R });
+        assert.strictEqual(widened.body.leads.length, 0, "?owner= cannot widen a member's scope");
+
+        // A head narrowing to one rep still works.
+        const narrowed = await call("GET", "/api/leads?owner=" + rep._id, { token: CH });
+        assert.strictEqual(narrowed.body.leads.length, 2, "a head may filter down to one rep");
+
+        await mkLead(R, { company: "XYZ Hotel", product: "CCTV", source: "Referral", value: 45000 });
+        assert.strictEqual((await call("GET", "/api/leads?product=CCTV", { token: R })).body.leads.length, 1);
+        assert.strictEqual((await call("GET", "/api/leads?q=hotel", { token: R })).body.leads.length, 1,
+            "search is case-insensitive");
+        assert.strictEqual((await call("GET", "/api/leads?q=x.z", { token: R })).body.leads.length, 0,
+            "regex metacharacters stay literal");
+
         pass("Sales Pipeline", "lead create, owner rules, follow-up task invariant, WhatsApp alert");
 
         console.log("\n  FEATURE VERIFICATION\n  " + "=".repeat(74));

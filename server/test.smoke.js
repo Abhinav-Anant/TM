@@ -201,6 +201,39 @@ e@x.com,Eve,short
     assert.strictEqual(without.rows[0].department, "", "missing column is no department, not an error");
 }
 
+// --- lead filters ------------------------------------------------------------
+{
+    const { buildLeadFilters } = require("./controller/lead.controller.js");
+
+    assert.deepStrictEqual(buildLeadFilters({}, {}), {}, "admin, no filters, matches everything");
+    assert.deepStrictEqual(
+        buildLeadFilters({}, { stage: "Proposal", product: "Firewall" }),
+        { stage: "Proposal", product: "Firewall" },
+        "filters pass straight through for an admin"
+    );
+    assert.strictEqual(buildLeadFilters({}, { stage: "All" }).stage, undefined, "'All' is the UI's no-filter sentinel");
+
+    // The security property: a query parameter must never widen the scope. A
+    // member passing ?owner=<someone else> still only matches their own leads.
+    assert.deepStrictEqual(
+        buildLeadFilters({ owner: "me" }, { owner: "someone-else" }),
+        { $and: [{ owner: "someone-else" }, { owner: "me" }] },
+        "scope is ANDed with the query, never overwritten by it"
+    );
+
+    // A head filtering by one rep still narrows rather than replacing their scope.
+    assert.deepStrictEqual(
+        buildLeadFilters({ owner: { $in: ["r1", "r2"] } }, { owner: "r1" }),
+        { $and: [{ owner: "r1" }, { owner: { $in: ["r1", "r2"] } }] }
+    );
+
+    // Regex metacharacters in the search box stay literal.
+    const search = buildLeadFilters({}, { q: "a.b" });
+    assert.ok(search.$or[0].company instanceof RegExp);
+    assert.strictEqual(search.$or[0].company.source, "a\\.b", "metacharacters are escaped");
+    assert.strictEqual(search.$or.length, 2, "search covers company and contactName");
+}
+
 // --- scopeFor is field-agnostic, so leads can reuse it -----------------------
 // Async, so it runs last and owns the success line: printing "passed" before
 // awaiting these would report a green run for a failing assertion.
