@@ -1,6 +1,6 @@
 /**
  * End-to-end check of every feature added to this project.
- * Boots a real MongoDB (in-memory), a fake SMTP sink and the real `server/index.js`
+ * Boots a real MongoDB (in-memory), a fake WhatsApp gateway and the real `server/index.js`
  * process, then drives the HTTP API exactly as the clients do.
  *
  * Run with: npm run test:e2e
@@ -14,7 +14,8 @@ const { spawn } = require("child_process");
 const { MongoMemoryServer } = require("mongodb-memory-server");
 
 const PORT = 4321;
-const SMTP_PORT = 4325;
+const BLASTUP_PORT = 4325;
+const BLASTUP_KEY = "e2e-gateway-key";
 const BASE = `http://127.0.0.1:${PORT}`;
 const ADMIN_TOKEN = "let-me-in";
 const HEAD_TOKEN = "lead-me-in";
@@ -34,74 +35,36 @@ const hours = (offset) => new Date(Date.now() + offset * 60 * 60 * 1000).toISOSt
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const decodeQP = (text) => text
-    .replace(/=\r?\n/g, "")
-    .replace(/=([0-9A-Fa-f]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
-
-/**
- * Pulls the text/html alternative out of a raw MIME message.
- * Only this part is rendered as markup - the text/plain sibling is inert,
- * so escaping must be asserted here and nowhere else.
- */
-const htmlPartOf = (raw) => {
-    const section = raw.split(/Content-Type: text\/html[^\n]*\n/i)[1];
-    if (!section) return "";
-    const [headers, ...rest] = section.split(/\r?\n\r?\n/);
-    const body = rest.join("\n\n");
-    return /quoted-printable/i.test(headers) ? decodeQP(body) : body;
-};
-
-// --- tiny SMTP sink so we can prove an email actually leaves the app ----------
-const startSmtpSink = () => {
+// --- fake Blastup gateway, so we can prove a WhatsApp message actually leaves ---
+// Speaks just enough of the real contract: POST /api/send/text, x-api-key header,
+// {to, text} body. Rejecting a wrong key here is what proves the app sends one.
+const startWhatsAppGateway = () => {
     const received = [];
-    const server = net.createServer((socket) => {
-        let inData = false;
+    const server = http.createServer((req, res) => {
         let body = "";
-
-        socket.write("220 localhost ESMTP sink\r\n");
-        socket.on("data", (chunk) => {
-            const text = chunk.toString();
-
-            if (inData) {
-                body += text;
-                if (body.includes("\r\n.\r\n")) {
-                    inData = false;
-                    received.push(body);
-                    body = "";
-                    socket.write("250 OK queued\r\n");
-                }
+        req.on("data", (chunk) => { body += chunk; });
+        req.on("end", () => {
+            if (req.method !== "POST" || req.url !== "/api/send/text") {
+                res.writeHead(404).end('{"error":"not found"}');
                 return;
             }
-
-            for (const line of text.split("\r\n").filter(Boolean)) {
-                const cmd = line.toUpperCase();
-                if (cmd.startsWith("EHLO") || cmd.startsWith("HELO")) {
-                    socket.write("250-localhost\r\n250-AUTH PLAIN LOGIN\r\n250 OK\r\n");
-                } else if (cmd.startsWith("AUTH LOGIN")) {
-                    socket.write("334 VXNlcm5hbWU6\r\n");
-                } else if (cmd.startsWith("AUTH PLAIN")) {
-                    socket.write("235 2.7.0 Accepted\r\n");
-                } else if (cmd.startsWith("MAIL FROM")) {
-                    socket.write("250 OK\r\n");
-                } else if (cmd.startsWith("RCPT TO")) {
-                    socket.write("250 OK\r\n");
-                } else if (cmd.startsWith("DATA")) {
-                    inData = true;
-                    socket.write("354 End data with <CR><LF>.<CR><LF>\r\n");
-                } else if (cmd.startsWith("QUIT")) {
-                    socket.write("221 Bye\r\n");
-                    socket.end();
-                } else {
-                    // base64 credential lines land here
-                    socket.write(/^[A-Za-z0-9+/=]+$/.test(line) ? "235 2.7.0 Accepted\r\n" : "250 OK\r\n");
-                }
+            if (req.headers["x-api-key"] !== BLASTUP_KEY) {
+                res.writeHead(401).end('{"error":"bad api key"}');
+                return;
             }
+            try {
+                received.push(JSON.parse(body));
+            } catch {
+                res.writeHead(400).end('{"error":"bad json"}');
+                return;
+            }
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end('{"success":true}');
         });
-        socket.on("error", () => {});
     });
 
     return new Promise((resolve) => {
-        server.listen(SMTP_PORT, "127.0.0.1", () => resolve({ server, received }));
+        server.listen(BLASTUP_PORT, "127.0.0.1", () => resolve({ server, received }));
     });
 };
 
@@ -201,7 +164,7 @@ const waitForServer = async () => {
 // --- the run -----------------------------------------------------------------
 (async () => {
     const mongo = await MongoMemoryServer.create();
-    const smtp = await startSmtpSink();
+    const wa = await startWhatsAppGateway();
     const before = new Set(fs.existsSync(UPLOAD_DIR) ? fs.readdirSync(UPLOAD_DIR) : []);
 
     const server = spawn(process.execPath, [path.join(__dirname, "index.js")], {
@@ -214,11 +177,10 @@ const waitForServer = async () => {
             ADMIN_INVITE_TOKEN: ADMIN_TOKEN,
             HEAD_INVITE_TOKEN: HEAD_TOKEN,
             CLIENT_URL: "http://localhost:5173",
-            SMTP_HOST: "127.0.0.1",
-            SMTP_PORT: String(SMTP_PORT),
-            SMTP_USER: "sink",
-            SMTP_PASS: "sink",
-            MAIL_FROM: "tasks@example.test",
+            BLASTUP_URL: `http://127.0.0.1:${BLASTUP_PORT}`,
+            BLASTUP_API_KEY: BLASTUP_KEY,
+            DEFAULT_COUNTRY_CODE: "91",
+            WHATSAPP_SEND_GAP_MS: "0", // pacing is a gateway concern; keep the suite quick
             REMINDER_WINDOW_HOURS: "24",
             REMINDER_INTERVAL_MINUTES: "0.05", // 3s, so the scan is observable
             NODE_ENV: "test",
@@ -232,7 +194,7 @@ const waitForServer = async () => {
 
     const cleanup = async () => {
         server.kill();
-        smtp.server.close();
+        wa.server.close();
         await mongo.stop();
         // remove only what this run uploaded
         if (fs.existsSync(UPLOAD_DIR)) {
@@ -250,7 +212,8 @@ const waitForServer = async () => {
             body: { name: "Ada Admin", email: "admin@example.test", password: "pw123456", adminInviteToken: ADMIN_TOKEN },
         })).body;
         const member = (await call("POST", "/api/auth/register", {
-            body: { name: "Mo Member", email: "member@example.test", password: "pw123456" },
+            // spaces on purpose: the server must normalise this to 919876543210
+            body: { name: "Mo Member", email: "member@example.test", password: "pw123456", phone: "98765 43210" },
         })).body;
         const outsider = (await call("POST", "/api/auth/register", {
             body: { name: "Otto Outsider", email: "outsider@example.test", password: "pw123456" },
@@ -539,34 +502,53 @@ const waitForServer = async () => {
         assert.strictEqual(countB, countA, "reminders must not repeat on every scan");
         pass("Deadline alerts", `${countA} reminder(s) raised by the scheduler, no duplicates after 2 more scans`);
 
-        // ---------- 10. EMAIL NOTIFICATIONS ----------
-        let mails = smtp.received;
-        for (let i = 0; i < 15 && mails.length === 0; i += 1) { await sleep(500); mails = smtp.received; }
-        assert.ok(mails.length > 0, "at least one email should have reached the SMTP sink");
-        const joined = mails.join("\n");
-        assert.ok(/To:.*member@example\.test/i.test(joined), "addressed to the assignee");
-        assert.ok(/tasks@example\.test/i.test(joined), "MAIL_FROM honoured");
-        assert.ok(/localhost:5173\/user\/task-details\//.test(joined), "deep link back to the task");
-        pass("Email Notifications", `${mails.length} message(s) delivered to the SMTP sink, addressed + deep-linked`);
+        // ---------- 10. WHATSAPP NOTIFICATIONS ----------
+        let sent = wa.received;
+        for (let i = 0; i < 15 && sent.length === 0; i += 1) { await sleep(500); sent = wa.received; }
+        assert.ok(sent.length > 0, "at least one WhatsApp message should have reached the gateway");
 
-        // escaping holds on the wire
-        const mailsBeforeXss = smtp.received.length;
-        await mk({ title: 'Fix <img src=x onerror="alert(1)"> bug', category: "Support", dueDate: day(6) });
+        // The gateway rejects a wrong key with a 401, so anything arriving here
+        // proves the app authenticated - and the number proves normalisation ran
+        // on the way in: the member registered with "98765 43210".
+        assert.ok(sent.every((m) => m.to === "919876543210"),
+            "every message is addressed to the assignee's normalised number");
+        assert.ok(sent.some((m) => /localhost:5173\/user\/task-details\//.test(m.text)),
+            "deep link back to the task");
+        assert.ok(sent.some((m) => /Ada Admin assigned you/.test(m.text)),
+            "the message names who acted");
+        assert.ok(sent.every((m) => m.text.length <= 4096), "within the gateway's text limit");
+        pass("WhatsApp Notifications", `${sent.length} message(s) delivered to the gateway, addressed + deep-linked`);
 
-        let xssHtml = "";
-        let xssPlain = "";
-        for (let i = 0; i < 20; i += 1) {
-            await sleep(500);
-            const fresh = smtp.received.slice(mailsBeforeXss);
-            const hit = fresh.find((m) => /img src/.test(m));
-            if (hit) { xssHtml = htmlPartOf(hit); xssPlain = hit; break; }
-        }
+        // A member with no number on file must never reach the gateway - the
+        // in-app alert still lands, which is the whole point of not hard-gating.
+        const beforeSilent = wa.received.length;
+        const silentTask = (await call("POST", "/api/tasks", {
+            token: A, body: { title: "No number on file", dueDate: day(3), assignedTo: [outsider._id] },
+        })).body.task;
+        assert.ok(silentTask._id, "task for the number-less member was created");
 
-        assert.ok(xssHtml, "the alert email for the crafted title should arrive with an HTML part");
-        assert.ok(!/<img src=x onerror/.test(xssHtml), "task titles must not reach the HTML body as live markup");
-        assert.ok(/&lt;img src=x onerror=&quot;alert\(1\)&quot;&gt;/.test(xssHtml), "escaped form present instead");
-        assert.ok(/text\/plain/.test(xssPlain), "a plain-text alternative is still sent alongside it");
-        pass("Email escaping", "task title with markup arrives escaped, not as live HTML");
+        await sleep(2000);
+        assert.ok(
+            wa.received.slice(beforeSilent).every((m) => m.to === "919876543210"),
+            "nothing was sent for the member who never saved a number"
+        );
+        const outsiderInbox = await call("GET", "/api/notifications?limit=100", { token: O });
+        assert.ok(
+            outsiderInbox.body.notifications.some((n) => /No number on file/.test(n.title)),
+            "they still get the in-app notification"
+        );
+        pass("WhatsApp opt-in", "members without a saved number are skipped, in-app alert still delivered");
+
+        // A number the server cannot normalise is refused rather than stored,
+        // so nobody is left believing they are reachable when they are not.
+        assert.strictEqual(
+            (await call("PUT", "/api/auth/profile", { token: O, body: { phone: "12345" } })).status, 400,
+            "a junk number is rejected"
+        );
+        const saved = await call("PUT", "/api/auth/profile", { token: O, body: { phone: "+91 91234 56789" } });
+        assert.strictEqual(saved.status, 200);
+        assert.strictEqual(saved.body.phone, "919123456789", "stored in the gateway's bare international form");
+        pass("Phone number validation", "junk rejected with 400, valid input normalised to 919123456789");
 
         stream.close();
 
@@ -696,6 +678,27 @@ const waitForServer = async () => {
         const adminDash = (await call("GET", "/api/tasks/dashboard-data", { token: A })).body.data;
         assert.ok(headDash.allTasksCount < adminDash.allTasksCount, "head's task count is scoped, admin's is not");
         assert.strictEqual(headDash.allUsersCount, 2, "head counts only their own department's people");
+
+        // Completion escalates past the task's own people: the assignee's department
+        // head is copied even though they neither created it nor were assigned it.
+        const escalated = (await call("POST", "/api/tasks", {
+            token: A, body: { title: "Quarterly numbers", dueDate: day(4), assignedTo: [salesMember._id] },
+        })).body.task;
+        assert.strictEqual(
+            (await call("PUT", "/api/tasks/" + escalated._id + "/status", {
+                token: salesMember.token, body: { status: "Completed" },
+            })).status, 200, "assignee completes their own task"
+        );
+
+        let headAlerts = [];
+        for (let i = 0; i < 10; i += 1) {
+            await sleep(300);
+            headAlerts = (await call("GET", "/api/notifications?limit=100", { token: H }))
+                .body.notifications.filter((n) => /Quarterly numbers is now Completed/.test(n.title));
+            if (headAlerts.length) break;
+        }
+        assert.strictEqual(headAlerts.length, 1, "the department head is copied on a completion, exactly once");
+        pass("Completion escalation", "department head notified on a completion they were neither assigned nor created");
 
         // And so is the assignable-people list.
         const headUsers = (await call("GET", "/api/users", { token: H })).body.map((u) => u.email).sort();

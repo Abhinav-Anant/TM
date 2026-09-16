@@ -7,7 +7,7 @@ const assert = require("assert");
 
 const { buildFilters, buildSort, syncProgress, escapeRegex } = require("./controller/task.controller.js");
 const { addClient, push, connectionCount } = require("./utils/sse.js");
-const { escapeHtml } = require("./utils/mailer.js");
+const { normalizePhone } = require("./utils/phone.js");
 const { parseMembersCsv } = require("./utils/csv.js");
 
 // buildFilters now takes an already-resolved scope (see server/utils/scope.js)
@@ -135,12 +135,28 @@ assert.deepStrictEqual(buildSort({}), { createdAt: -1 });
     assert.strictEqual(connectionCount(), 0, "registry does not leak entries");
 }
 
-// --- email escaping -------------------------------------------------------
-assert.strictEqual(
-    escapeHtml('<img src=x onerror="alert(1)">'),
-    "&lt;img src=x onerror=&quot;alert(1)&quot;&gt;",
-    "task titles land in HTML email - they must be escaped"
-);
+// --- phone normalisation --------------------------------------------------
+// A number that survives this is what gets stored, so a mistake here is a
+// member who silently never receives a WhatsApp alert.
+{
+    const valid = {
+        "9876543210": "919876543210",        // bare local, gets the default code
+        "98765 43210": "919876543210",       // separators are noise
+        "+91 98765 43210": "919876543210",   // explicit code, "+" dropped
+        "0091-9876543210": "919876543210",   // 00 is the same as "+"
+        "09876543210": "919876543210",       // leading 0 is a trunk prefix
+        "919876543210": "919876543210",      // already normalised, unchanged
+        "+1 415 555 0123": "14155550123",    // not everyone is in India
+    };
+    for (const [input, expected] of Object.entries(valid)) {
+        assert.strictEqual(normalizePhone(input), expected, `${input} should normalise to ${expected}`);
+    }
+
+    // Anything we cannot turn into a real number must be refused, never guessed at.
+    for (const bad of ["", "   ", "12345", "abc", "+", "0", null, undefined, "12345678901234567"]) {
+        assert.strictEqual(normalizePhone(bad), null, `${JSON.stringify(bad)} is not a usable number`);
+    }
+}
 // --- member CSV import ----------------------------------------------------
 {
     const BOM = String.fromCharCode(0xFEFF);

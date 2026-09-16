@@ -2,6 +2,7 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../model/user.model.js");
+const { normalizePhone } = require("../utils/phone.js");
 
 // Generate JWT Token
 const generateToken = (userId) => {
@@ -11,7 +12,7 @@ const generateToken = (userId) => {
 // Register User
 const registerUser = async (req, res) => {
     try {
-        const { name, email, password, profileImageUrl, adminInviteToken } = req.body;
+        const { name, email, password, phone, profileImageUrl, adminInviteToken } = req.body;
 
         // Check if user exists
         const userExist = await User.findOne({ email });
@@ -34,10 +35,14 @@ const registerUser = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, salt);
 
         // Create the new user
+        // Optional at signup - members who skip it are prompted in the portal
+        // until they add one. A number we cannot normalise is dropped rather
+        // than stored, so a bad value never reaches the WhatsApp gateway.
         const user = await User.create({
             name,
             email,
             password: hashedPassword,
+            phone: normalizePhone(phone),
             profileImageUrl,
             role,
         });
@@ -48,6 +53,7 @@ const registerUser = async (req, res) => {
             name: user.name,
             email: user.email,
             role: user.role,
+            phone: user.phone,
             profileImageUrl: user.profileImageUrl,
             token: generateToken(user._id),
         });
@@ -80,6 +86,7 @@ const loginUser = async (req, res) => {
             name: user.name,
             email: user.email,
             role: user.role,
+            phone: user.phone,
             profileImageUrl: user.profileImageUrl,
             token: generateToken(user._id)
         })
@@ -113,11 +120,22 @@ const updateUserProfile = async (req, res) => {
             return res.status(404).json({ message: "User not found" });
         }
 
-        const { name, email, profileImageUrl, password } = req.body;
+        const { name, email, phone, profileImageUrl, password } = req.body;
 
         if (name) user.name = name;
         if (email) user.email = email;
         if (profileImageUrl) user.profileImageUrl = profileImageUrl;
+
+        // Rejecting loudly matters here: silently discarding a typo'd number
+        // would leave the member believing they are reachable on WhatsApp when
+        // nothing will ever be delivered to them.
+        if (phone !== undefined) {
+            const normalized = normalizePhone(phone);
+            if (phone !== "" && phone !== null && !normalized) {
+                return res.status(400).json({ message: "That does not look like a valid mobile number" });
+            }
+            user.phone = normalized;
+        }
         if (password) {
             const salt = await bcrypt.genSalt(10);
             user.password = await bcrypt.hash(password, salt);
@@ -130,6 +148,7 @@ const updateUserProfile = async (req, res) => {
             name: user.name,
             email: user.email,
             role: user.role,
+            phone: user.phone,
             profileImageUrl: user.profileImageUrl,
             token:generateToken(user._id)
         });

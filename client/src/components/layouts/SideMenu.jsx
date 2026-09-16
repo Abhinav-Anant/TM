@@ -1,4 +1,5 @@
 import React, { useContext, useEffect, useState } from 'react';
+import { LuSmartphone } from 'react-icons/lu';
 import { UserContext } from '../../context/userContext';
 import { useNavigate } from 'react-router-dom';
 import { SIDE_MENU_DATA, SIDE_MENU_USER_DATA, SIDE_MENU_HEAD_DATA } from '../../utils/data';
@@ -74,6 +75,20 @@ const SideMenu = ({ activeMenu, onNavigate, variant = 'rail' }) => {
 
         <h5 className="font-display text-beam mt-3 text-center leading-tight">{user?.name || ''}</h5>
         <p className="text-dusk text-xs mt-1 text-center break-all">{user?.email || ''}</p>
+
+        {/* A missing number means no WhatsApp alerts, so it reads as something
+            to fix rather than as another line of profile text. */}
+        {user?.phone ? (
+          <p className="text-dusk text-xs mt-1 text-center num">+{user.phone}</p>
+        ) : (
+          <button
+            type="button"
+            onClick={() => handleClick('/profile')}
+            className="chip chip-signal mt-2 cursor-pointer hover:brightness-125 transition-[filter]"
+          >
+            <LuSmartphone /> Add your number
+          </button>
+        )}
       </div>
 
       <div className="h-px mx-6 bg-gradient-to-r from-transparent via-white/12 to-transparent" />

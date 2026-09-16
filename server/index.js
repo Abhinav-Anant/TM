@@ -7,7 +7,7 @@ const cors = require("cors");
 const multer = require("multer");
 const connection = require("./configue/db.js"); // Ensure this is the correct path to your DB configuration
 const { startReminders } = require("./utils/reminders.js");
-const { mailEnabled } = require("./utils/mailer.js");
+const { whatsappEnabled } = require("./utils/whatsapp.js");
 
 // Route imports
 const authRoutes = require('./routes/auth.route.js');
@@ -70,7 +70,7 @@ app.listen(PORT, async () => {
     try {
         await connection;
         console.log(`Server is running on port ${PORT}`);
-        console.log(`Email notifications: ${mailEnabled ? "enabled" : "disabled (set SMTP_HOST / SMTP_USER to enable)"}`);
+        console.log(`WhatsApp notifications: ${whatsappEnabled ? "enabled" : "disabled (set BLASTUP_URL / BLASTUP_API_KEY to enable)"}`);
         startReminders();
     } catch (error) {
         console.error("Database connection failed:", error);

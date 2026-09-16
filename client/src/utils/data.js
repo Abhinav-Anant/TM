@@ -1,6 +1,6 @@
 import {
   LuLayoutDashboard, LuClipboardCheck, LuSquarePlus, LuLogOut, LuUsers,
-  LuCalendarDays, LuChartColumnBig, LuBuilding2,
+  LuCalendarDays, LuChartColumnBig, LuBuilding2, LuSmartphone,
 } from 'react-icons/lu';
 
 export const SIDE_MENU_DATA = [
@@ -48,6 +48,12 @@ export const SIDE_MENU_DATA = [
   },
   {
     id: "08",
+    label: "My Profile",
+    icon: LuSmartphone,
+    path: "/profile",
+  },
+  {
+    id: "09",
     label: "Log Out",
     icon: LuLogOut,
     path: "logout",
@@ -63,7 +69,8 @@ export const SIDE_MENU_HEAD_DATA = [
   { id: "04", label: "Calendar", icon: LuCalendarDays, path: "/calendar" },
   { id: "05", label: "Analytics", icon: LuChartColumnBig, path: "/analytics" },
   { id: "06", label: "My Department", icon: LuUsers, path: "/head/users" },
-  { id: "07", label: "Log Out", icon: LuLogOut, path: "logout" },
+  { id: "07", label: "My Profile", icon: LuSmartphone, path: "/profile" },
+  { id: "08", label: "Log Out", icon: LuLogOut, path: "logout" },
 ];
 
 export const SIDE_MENU_USER_DATA = [
@@ -93,6 +100,12 @@ export const SIDE_MENU_USER_DATA = [
   },
   {
     id: "05",
+    label: "My Profile",
+    icon: LuSmartphone,
+    path: "/profile",
+  },
+  {
+    id: "06",
     label: "Logout",
     icon: LuLogOut,
     path: "logout",
