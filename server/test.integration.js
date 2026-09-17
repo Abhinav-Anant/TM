@@ -610,7 +610,7 @@ const waitForServer = async () => {
             "head with no department cannot assign"
         );
 
-        await call("POST", "/api/departments/" + sales._id + "/members", { token: A, body: { userId: headSales._id } });
+        await call("POST", "/api/departments/" + sales._id + "/members", { token: A, body: { userId: headSales._id, head: true } });
         await call("POST", "/api/departments/" + sales._id + "/members", { token: A, body: { userId: salesMember._id } });
         await call("POST", "/api/departments/" + eng._id + "/members", { token: A, body: { userId: engMember._id } });
 
@@ -619,7 +619,7 @@ const waitForServer = async () => {
             body: { name: "Hugo Head", email: "hugo@example.test", password: "pw123456", adminInviteToken: HEAD_TOKEN },
         })).body;
         assert.strictEqual(
-            (await call("POST", "/api/departments/" + sales._id + "/members", { token: A, body: { userId: secondHead._id } })).status,
+            (await call("POST", "/api/departments/" + sales._id + "/members", { token: A, body: { userId: secondHead._id, head: true } })).status,
             409, "a department may only have one head"
         );
 
@@ -631,7 +631,7 @@ const waitForServer = async () => {
             403, "a head cannot add members to their own department"
         );
 
-        // A head sees only their own department.
+        // A head sees only departments they LEAD.
         const headDepts = (await call("GET", "/api/departments", { token: H })).body.departments;
         assert.strictEqual(headDepts.length, 1, "head sees exactly one department");
         assert.strictEqual(headDepts[0].name, "Sales");
@@ -711,7 +711,8 @@ const waitForServer = async () => {
         // Deleting a department detaches its members rather than orphaning the ref.
         await call("DELETE", "/api/departments/" + eng._id, { token: A });
         const engAfter = (await call("GET", "/api/users/" + engMember._id, { token: A })).body;
-        assert.strictEqual(engAfter.department, null, "deleting a department clears its members' department");
+        assert.deepStrictEqual(engAfter.memberships, [],
+            "deleting a department drops it from its members' memberships");
         pass("Departments & hierarchy", "admin-only org chart, head fenced to own department, PUT /tasks/:id locked down");
         // --- CSV member import ------------------------------------------
         const importRes = await uploadCsv(A, [
@@ -749,11 +750,13 @@ const waitForServer = async () => {
         const quoted = roster.body.find((u) => u.email === "imported.two@e2e.test");
         assert.ok(quoted, "quoted-name row landed in the member list");
         assert.strictEqual(quoted.name, "Two, Imported", "a comma inside a quoted name does not split the row");
-        assert.strictEqual(quoted.department, null, "a blank department cell imports as no department");
+        assert.deepStrictEqual(quoted.memberships, [], "a blank department cell imports as no membership");
 
         // "sales" in the file must resolve to the "Sales" department created above.
         const placed = roster.body.find((u) => u.email === "imported.one@e2e.test");
-        assert.strictEqual(String(placed.department?._id), String(sales._id), "department name resolves case-insensitively");
+        assert.strictEqual(String(placed.memberships[0].department?._id), String(sales._id),
+            "department name resolves case-insensitively");
+        assert.strictEqual(placed.memberships[0].head, false, "an imported member never arrives as a head");
 
         // Re-importing the same file must not duplicate anyone.
         const again = await uploadCsv(A, "name,email,password\nImported One,imported.one@e2e.test,secret123\n");
@@ -780,8 +783,13 @@ const waitForServer = async () => {
             body: { name: "Rita Rival", email: "rival@example.test", password: "pw123456" },
         })).body;
         for (const u of [crmHead, rep, rival]) {
-            await call("POST", "/api/departments/" + crm._id + "/members", { token: A, body: { userId: u._id } });
+            await call("POST", "/api/departments/" + crm._id + "/members", {
+                // Headship is explicit now - the head role alone does not grant it.
+                token: A, body: { userId: u._id, head: String(u._id) === String(crmHead._id) },
+            });
         }
+        // The CRM department must grant both screens or every call below 403s.
+        await call("PUT", "/api/departments/" + crm._id, { token: A, body: { modules: ["sales", "leads"] } });
         const CH = crmHead.token, R = rep.token, RV = rival.token;
 
         const mkLead = async (token, over = {}) => call("POST", "/api/leads", {
@@ -970,6 +978,94 @@ const waitForServer = async () => {
         const repRow = headPipe.body.owners.find((o) => String(o.owner?._id) === String(rep._id));
         assert.ok(repRow && repRow.owner.name === "Ravi Rep", "rows carry the rep's name, not a bare id");
         assert.ok(headPipe.body.totals.leads >= repPipe.body.totals.leads, "the head's totals cover the department");
+
+        // ---------- DEPARTMENT MODULE ACCESS ----------
+        // Marketing grants Leads only; CRM grants both. A rep in BOTH is the
+        // case the single-department model could not express at all.
+        const mkt = (await call("POST", "/api/departments", { token: A, body: { name: "Mktg" } })).body.department;
+        const walled = (await call("POST", "/api/departments", { token: A, body: { name: "Walled" } })).body.department;
+        await call("PUT", "/api/departments/" + mkt._id, { token: A, body: { modules: ["leads"] } });
+        // `walled` deliberately gets no modules at all.
+
+        const mktHead = (await call("POST", "/api/auth/register", {
+            body: { name: "Maya Marketing", email: "mkthead@example.test", password: "pw123456", adminInviteToken: HEAD_TOKEN },
+        })).body;
+        const walledOff = (await call("POST", "/api/auth/register", {
+            body: { name: "Owen Outsider", email: "walledOff@example.test", password: "pw123456" },
+        })).body;
+        const MH = mktHead.token, OU = walledOff.token;
+
+        await call("POST", "/api/departments/" + mkt._id + "/members", { token: A, body: { userId: mktHead._id, head: true } });
+        await call("POST", "/api/departments/" + walled._id + "/members", { token: A, body: { userId: walledOff._id } });
+        // The dual-member: already a CRM rep, now also in Marketing.
+        await call("POST", "/api/departments/" + mkt._id + "/members", { token: A, body: { userId: rep._id } });
+
+        // A department with no modules ticked loses both screens entirely.
+        assert.strictEqual((await call("GET", "/api/leads", { token: OU })).status, 403,
+            "a department granting nothing cannot reach the lead list");
+        assert.strictEqual((await call("GET", "/api/leads/pipeline", { token: OU })).status, 403,
+            "...nor the pipeline");
+
+        // Marketing grants leads but not sales.
+        assert.strictEqual((await call("GET", "/api/leads", { token: MH })).status, 200,
+            "the marketing head reaches the lead list");
+        assert.strictEqual((await call("GET", "/api/leads/pipeline", { token: MH })).status, 403,
+            "the marketing head does NOT reach the sales dashboard");
+
+        // Modules are a union: the rep is in CRM (both) and Marketing (leads).
+        assert.strictEqual((await call("GET", "/api/leads/pipeline", { token: R })).status, 200,
+            "a member of a sales-granting department keeps the dashboard");
+
+        // The accepted consequence of a shared lead pool: leads carry no
+        // department, so BOTH of the rep's heads see all of the rep's leads.
+        const mktList = await call("GET", "/api/leads", { token: MH });
+        assert.ok(mktList.body.leads.some((l) => String(l.owner._id) === String(rep._id)),
+            "the marketing head sees the dual-member's leads, including CRM ones");
+
+        // A head's assign rights follow the departments they LEAD. rival is
+        // CRM-only, and mktHead heads Marketing, so this must be refused.
+        assert.strictEqual(
+            (await call("POST", "/api/leads", {
+                token: MH,
+                body: { company: "Out Of Reach", product: "Internet", source: "Website", owner: rival._id },
+            })).status,
+            403, "a head cannot assign a lead to someone outside the departments they lead");
+
+        // Headship is not implied by the role, and not granted by joining.
+        assert.strictEqual(
+            (await call("POST", "/api/departments/" + walled._id + "/members", { token: A, body: { userId: rep._id, head: true } })).status,
+            400, "a member cannot be made head of a department");
+        assert.strictEqual(
+            (await call("POST", "/api/departments/" + mkt._id + "/members", { token: A, body: { userId: rep._id } })).status,
+            409, "joining the same department twice is refused");
+
+        // One head per department still holds...
+        const spare = (await call("POST", "/api/auth/register", {
+            body: { name: "Sam Spare", email: "spare@example.test", password: "pw123456", adminInviteToken: HEAD_TOKEN },
+        })).body;
+        assert.strictEqual(
+            (await call("POST", "/api/departments/" + mkt._id + "/members", { token: A, body: { userId: spare._id, head: true } })).status,
+            409, "a department still cannot have two heads");
+
+        // ...but one person heading two departments is now allowed.
+        assert.strictEqual(
+            (await call("POST", "/api/departments/" + walled._id + "/members", { token: A, body: { userId: mktHead._id, head: true } })).status,
+            200, "a head may lead a second department");
+
+        // A head merely a member elsewhere gains no rights there: mktHead heads
+        // Marketing and Walled, but is not in CRM, so CRM-only leads owned by
+        // rival stay invisible.
+        const mktLeads = (await call("GET", "/api/leads", { token: MH })).body.leads;
+        assert.ok(!mktLeads.some((l) => String(l.owner._id) === String(rival._id)),
+            "a head sees nothing from a department they do not lead or belong to");
+
+        // The profile carries the computed modules, so the client never re-derives them.
+        const mktProfile = await call("GET", "/api/auth/profile", { token: MH });
+        assert.deepStrictEqual(mktProfile.body.modules, ["leads"], "profile reports the granted modules");
+        const adminProfile = await call("GET", "/api/auth/profile", { token: A });
+        assert.deepStrictEqual(adminProfile.body.modules.slice().sort(), ["leads", "sales"], "an admin gets everything");
+
+        pass("Module Access", "sales/leads gated per department, dual membership, explicit headship");
 
         pass("Sales Pipeline", `${headPipe.body.totals.leads} leads: scope isolation, follow-up invariant, stage history, outcomes, funnel`);
 
