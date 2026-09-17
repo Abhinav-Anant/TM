@@ -39,7 +39,7 @@ export const API_PATHS = {
         UPDATE: (id) => `/api/departments/${id}`,          // Admin only
         DELETE: (id) => `/api/departments/${id}`,          // Admin only
         GET_MEMBERS: (id) => `/api/departments/${id}/members`,
-        ADD_MEMBER: (id) => `/api/departments/${id}/members`,            // { userId }
+        ADD_MEMBER: (id) => `/api/departments/${id}/members`,            // { userId, head }
         REMOVE_MEMBER: (id, userId) => `/api/departments/${id}/members/${userId}`,
     },
     LEADS: {

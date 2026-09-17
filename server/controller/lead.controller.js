@@ -86,7 +86,7 @@ const createLead = async (req, res) => {
                 return res.status(403).json({ message: "You can only create leads you own" });
             }
             if (!await canAssignTo(req.user, [ownerId])) {
-                return res.status(403).json({ message: "You can only assign leads to members of your own department" });
+                return res.status(403).json({ message: "You can only assign leads to members of a department you head" });
             }
         }
 
@@ -197,7 +197,7 @@ const updateLead = async (req, res) => {
                 return res.status(403).json({ message: "You cannot reassign a lead" });
             }
             if (!await canAssignTo(req.user, [owner])) {
-                return res.status(403).json({ message: "You can only assign leads to members of your own department" });
+                return res.status(403).json({ message: "You can only assign leads to members of a department you head" });
             }
             lead.owner = owner;
             lead.history.push({ by: req.user._id, text: `Reassigned by ${req.user.name}` });

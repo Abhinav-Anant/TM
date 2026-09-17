@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../model/user.model.js')
+const { modulesFor } = require('../utils/scope.js');
 
 
 const protect = async (req, res, next) => {
@@ -49,4 +50,26 @@ const allowRoles = (...roles) => (req, res, next) => {
 }
 
 
-module.exports = { adminOnly, allowRoles, protect }
+/**
+ * Gate a route on a module a department grants, e.g. requireModule("leads").
+ *
+ * 403, not the 404 used for out-of-scope records: that 404 exists so a response
+ * cannot confirm a record's existence, and a module gate reveals nothing about
+ * records. Must run after `protect` - it reads req.user.
+ */
+const requireModule = (name) => async (req, res, next) => {
+    try {
+        const modules = await modulesFor(req.user);
+        if (!modules.includes(name)) {
+            return res.status(403).json({
+                message: `Access denied, ${name} is not enabled for your department`,
+            });
+        }
+        next();
+    } catch (error) {
+        res.status(500).json({ message: "Server error", error: error.message });
+    }
+}
+
+
+module.exports = { adminOnly, allowRoles, protect, requireModule }

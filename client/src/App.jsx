@@ -63,14 +63,18 @@ const App = () => {
               <Route element={<PrivateRoute />}>
                 <Route path="/user/task-details/:id" element={<ViewTaskDetails />} />
                 <Route path="/calendar" element={<CalendarView />} />
-                {/* Sales: open to any signed-in user - the API scopes every
-                    response, so a member outside Sales just sees an empty
-                    pipeline. Hiding the nav link is a UI concern, not a guard. */}
-                <Route path="/sales" element={<SalesDashboard />} />
-                <Route path="/sales/leads" element={<Leads />} />
-                <Route path="/sales/leads/:id" element={<LeadDetail />} />
                 <Route path="/analytics" element={<Analytics />} />
                 <Route path="/profile" element={<Profile />} />
+              </Route>
+
+              {/* Sales and Leads are granted per department (Department.modules).
+                  This guard is UX only - requireModule on the API enforces it. */}
+              <Route element={<PrivateRoute requiresModule="sales" />}>
+                <Route path="/sales" element={<SalesDashboard />} />
+              </Route>
+              <Route element={<PrivateRoute requiresModule="leads" />}>
+                <Route path="/sales/leads" element={<Leads />} />
+                <Route path="/sales/leads/:id" element={<LeadDetail />} />
               </Route>
 
               {/* default path */}
