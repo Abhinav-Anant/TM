@@ -198,7 +198,7 @@ Ten files, plus the two models above.
 `canAccessTask` and `canAssignTo` re-base onto headed departments; add
 `modulesFor` and a `headedDepartmentIds(user)` helper.
 
-**`server/middleware/auth.js`** — add `requireModule(name)`.
+**`server/middleware/authMiddleware.js`** — add `requireModule(name)`.
 
 **`server/routes/lead.route.js`** — `requireModule('sales')` on `/pipeline`,
 `requireModule('leads')` on everything else. Route ordering is unchanged and
@@ -295,9 +295,12 @@ second-copy-of-the-org-chart problem this design avoids.
 
 Matching the existing two-file setup.
 
-`server/test.smoke.js` — `scopeFor` for four shapes: admin, plain member,
-single-department head, and head-of-A-member-of-B. Plus `modulesFor` for the
-admin case, the union case, and the no-modules case.
+`server/test.smoke.js` — the branches that never touch the database: `scopeFor`
+for admin and for a plain member, `modulesFor` for admin and for a user with no
+departments, and `headedDepartmentIds` for the discriminating cases
+(head-of-A-member-of-B, and role-without-headship). The head branches of
+`scopeFor` need `User` lookups and are covered end-to-end instead, matching how
+the existing smoke file already splits them.
 
 `server/test.integration.js` — a new block with a genuine dual-member:
 
