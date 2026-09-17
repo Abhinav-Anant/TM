@@ -3,6 +3,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../model/user.model.js");
 const { normalizePhone } = require("../utils/phone.js");
+const { modulesFor } = require("../utils/scope.js");
 
 // Generate JWT Token
 const generateToken = (userId) => {
@@ -53,6 +54,7 @@ const registerUser = async (req, res) => {
             name: user.name,
             email: user.email,
             role: user.role,
+            modules: await modulesFor(user),
             phone: user.phone,
             profileImageUrl: user.profileImageUrl,
             token: generateToken(user._id),
@@ -86,6 +88,7 @@ const loginUser = async (req, res) => {
             name: user.name,
             email: user.email,
             role: user.role,
+            modules: await modulesFor(user),
             phone: user.phone,
             profileImageUrl: user.profileImageUrl,
             token: generateToken(user._id)
@@ -105,7 +108,9 @@ const getUserProfile = async (req, res) => {
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
-        res.json(user);
+        // The client gates its nav and routes on this, so the rule has exactly
+        // one implementation and it lives on the server.
+        res.json({ ...user.toObject(), modules: await modulesFor(user) });
     } catch (error) {
         console.error("Error while retrieving user profile:", error.message);
         res.status(500).json({ message: "Server error", error: error.message });
@@ -148,6 +153,7 @@ const updateUserProfile = async (req, res) => {
             name: user.name,
             email: user.email,
             role: user.role,
+            modules: await modulesFor(user),
             phone: user.phone,
             profileImageUrl: user.profileImageUrl,
             token:generateToken(user._id)

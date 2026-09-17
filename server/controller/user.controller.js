@@ -2,7 +2,7 @@ const express = require("express");
 const Task = require('../model/task.model.js')
 const User = require('../model/user.model.js')
 const bcrypt = require("bcryptjs");
-const { departmentMemberIds } = require('../utils/scope.js');
+const { departmentMemberIds, headedDepartmentIds } = require('../utils/scope.js');
 const Department = require('../model/department.model.js')
 const { parseMembersCsv } = require('../utils/csv.js')
 
@@ -14,14 +14,14 @@ const MAX_IMPORT_ROWS = 200;
 const getUser = async (req, res) => {
     try {
         // Admins may assign to anyone (members and heads alike); a head only ever
-        // sees the people in their own department.
+        // sees the people in departments they lead.
         const filter = req.user.role === "head"
-            ? { _id: { $in: await departmentMemberIds(req.user.department) } }
+            ? { _id: { $in: await departmentMemberIds(headedDepartmentIds(req.user)) } }
             : { role: { $in: ["member", "head"] } };
 
         const users = await User.find(filter)
             .select("-password")
-            .populate("department", "name");
+            .populate("memberships.department", "name");
 
         const usersWithTaskCounts = [];
         for (const user of users) {
@@ -52,7 +52,7 @@ const getUserById = async (req, res) => {
         // Heads may only look up their own department; members only themselves.
         if (req.user.role !== "admin") {
             const allowed = req.user.role === "head"
-                ? (await departmentMemberIds(req.user.department)).map(String)
+                ? (await departmentMemberIds(headedDepartmentIds(req.user))).map(String)
                 : [String(req.user._id)];
             if (!allowed.includes(String(userId))) {
                 return res.status(403).json({ message: "Not authorized to view this user" });
@@ -124,7 +124,8 @@ const importMembers = async (req, res) => {
                 email: row.email,
                 password: await bcrypt.hash(row.password, salt),
                 role: "member",
-                department: row.department,
+                // One department per CSV row, joined as an ordinary member.
+                memberships: row.department ? [{ department: row.department, head: false }] : [],
             });
         }
 

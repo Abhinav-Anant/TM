@@ -1,7 +1,7 @@
 const Task = require('../model/task.model.js');
 const User = require('../model/user.model.js');
 const { notify } = require('../utils/notify.js');
-const { scopeFor, canAccessTask, canAssignTo, departmentMemberIds } = require('../utils/scope.js');
+const { scopeFor, canAccessTask, canAssignTo, departmentMemberIds, headedDepartmentIds } = require('../utils/scope.js');
 
 const SORTABLE_FIELDS = ["dueDate", "createdAt", "updatedAt", "priority", "progress", "title"];
 const PRIORITY_ORDER = { High: 3, Medium: 2, Low: 1 };
@@ -74,10 +74,17 @@ const watchersOf = (task) => [...(task.assignedTo || []), ...(task.createdBy || 
  * notify() de-duplicates and drops the actor, so overlap with watchersOf is free.
  */
 const completionWatchers = async (task) => {
-    const assignees = await User.find({ _id: { $in: task.assignedTo || [] } }).select("department");
-    const departments = [...new Set(assignees.map((user) => user.department).filter(Boolean).map(String))];
+    const assignees = await User.find({ _id: { $in: task.assignedTo || [] } }).select("memberships");
+    const departments = [...new Set(
+        assignees.flatMap((user) => (user.memberships || []).map((m) => String(m.department)))
+    )];
+    // `head: true` matters: without it a head would be copied on completions
+    // from a department they merely belong to as a rep.
     const oversight = await User.find({
-        $or: [{ role: "admin" }, { role: "head", department: { $in: departments } }],
+        $or: [
+            { role: "admin" },
+            { memberships: { $elemMatch: { department: { $in: departments }, head: true } } },
+        ],
     }).select("_id");
 
     return [...watchersOf(task), ...oversight.map((user) => user._id)];
@@ -92,9 +99,8 @@ const getDashboardData = async (req, res) => {
         // Every figure on this dashboard is scoped: a head sees their own
         // department's numbers only, never an org-wide total.
         const scope = await scopeFor(req.user);
-        const memberIds = req.user.role === "head"
-            ? await departmentMemberIds(req.user.department)
-            : null;
+        const led = headedDepartmentIds(req.user);
+        const memberIds = led.length ? await departmentMemberIds(led) : null;
         const userFilter = memberIds ? { _id: { $in: memberIds } } : {};
 
         const [
