@@ -252,25 +252,49 @@ e@x.com,Eve,short
     assert.strictEqual(OUTCOMES.length, 5);
 }
 
-// --- scopeFor is field-agnostic, so leads can reuse it -----------------------
+// --- scope and module access ------------------------------------------------
 // Async, so it runs last and owns the success line: printing "passed" before
 // awaiting these would report a green run for a failing assertion.
 (async () => {
-    const { scopeFor } = require("./utils/scope.js");
+    const { scopeFor, headedDepartmentIds, modulesFor, MODULES } = require("./utils/scope.js");
 
-    // The admin and member branches never touch the database, so they belong
-    // here; the head branch needs User lookups and is covered by the e2e suite.
+    // Only the branches that never touch the database belong here; anything
+    // needing a User lookup is covered by the e2e suite.
     assert.deepStrictEqual(await scopeFor({ role: "admin" }, "owner"), {}, "admin sees every lead");
+
+    // A member heads nothing, so the union collapses to just themselves.
     assert.deepStrictEqual(
-        await scopeFor({ role: "member", _id: "u1" }, "owner"),
-        { owner: "u1" },
-        "member is scoped to leads they own"
+        await scopeFor({ role: "member", _id: "u1", memberships: [{ department: "d1", head: false }] }, "owner"),
+        { owner: { $in: ["u1"] } },
+        "a member is scoped to records they own"
     );
     assert.deepStrictEqual(
-        await scopeFor({ role: "member", _id: "u1" }),
-        { assignedTo: "u1" },
+        await scopeFor({ role: "member", _id: "u1", memberships: [] }),
+        { assignedTo: { $in: ["u1"] } },
         "the default field is still assignedTo"
     );
+
+    // Headship comes from the membership, never from the role. This is the
+    // guard that stops a head who is merely a REP in another department from
+    // gaining that department's records.
+    assert.deepStrictEqual(
+        headedDepartmentIds({ memberships: [{ department: "d1", head: true }, { department: "d2", head: false }] }),
+        ["d1"],
+        "only memberships flagged head count as headships"
+    );
+    assert.deepStrictEqual(
+        headedDepartmentIds({ role: "head", memberships: [{ department: "d1", head: false }] }),
+        [],
+        "role alone never confers headship"
+    );
+    assert.deepStrictEqual(headedDepartmentIds({}), [], "a user with no memberships heads nothing");
+
+    // Modules: admin is special-cased because admins hold no memberships.
+    assert.deepStrictEqual(await modulesFor({ role: "admin" }), MODULES, "an admin gets every module");
+    assert.deepStrictEqual(await modulesFor({ role: "member", memberships: [] }), [],
+        "no department means no modules");
+
+    assert.deepStrictEqual(MODULES, ["sales", "leads"]);
 
     console.log("All smoke checks passed.");
 })();

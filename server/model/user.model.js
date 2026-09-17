@@ -1,5 +1,13 @@
 const mongoose = require('mongoose');
 
+// A person can sit in several departments; `head` marks the ones they lead.
+// Headship lives here rather than being derived from `role`, so joining a
+// second department as a rep cannot make you its head.
+const membershipSchema = new mongoose.Schema({
+    department: { type: mongoose.Schema.Types.ObjectId, ref: "Department", required: true },
+    head: { type: Boolean, default: false },
+}, { _id: false });
+
 const userSchema = new mongoose.Schema({
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
@@ -10,14 +18,15 @@ const userSchema = new mongoose.Schema({
     // the send path never has to guess. Null means alerts stay in-app only.
     phone: { type: String, default: null },
     role: { type: String, enum: ["admin", "head", "member"], default: "member" },
-    // Single source of truth for department membership - a head is simply the
-    // user in this department whose role is "head".
-    department: { type: mongoose.Schema.Types.ObjectId, ref: "Department", default: null },
+    memberships: { type: [membershipSchema], default: [] },
 },
 {
     timestamps: true 
 });
 
+
+// Nearly every scoped query filters on this, so it is not optional.
+userSchema.index({ 'memberships.department': 1 });
 
 const User = mongoose.model("User", userSchema);
 
