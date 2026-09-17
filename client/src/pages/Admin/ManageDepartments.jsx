@@ -14,6 +14,7 @@ const ManageDepartments = () => {
   const [newName, setNewName] = useState('');
   const [selected, setSelected] = useState(null); // { department, members }
   const [addUserId, setAddUserId] = useState('');
+  const [asHead, setAsHead] = useState(false);
 
   const loadDepartments = async () => {
     try {
@@ -69,6 +70,21 @@ const ManageDepartments = () => {
     }
   };
 
+  // Which screens this department grants. Sales and Leads are separate on
+  // purpose: a team may work the pipeline without owning lead records.
+  const toggleModule = async (department, name) => {
+    const next = (department.modules || []).includes(name)
+      ? department.modules.filter((m) => m !== name)
+      : [...(department.modules || []), name];
+    try {
+      await axiosInstance.put(API_PATHS.DEPARTMENTS.UPDATE(department._id), { modules: next });
+      toast.success(`${department.name}: ${next.length ? next.join(' + ') : 'no screens'}`);
+      loadDepartments();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to update screens');
+    }
+  };
+
   const deleteDepartment = async (department) => {
     const warning = 'Delete "' + department.name + '"? Its members will be left without a department.';
     if (!window.confirm(warning)) return;
@@ -88,9 +104,10 @@ const ManageDepartments = () => {
     try {
       await axiosInstance.post(
         API_PATHS.DEPARTMENTS.ADD_MEMBER(selected.department._id),
-        { userId: addUserId }
+        { userId: addUserId, head: asHead }
       );
-      toast.success('Member added');
+      toast.success(asHead ? 'Head of department set' : 'Member added');
+      setAsHead(false);
       openDepartment(selected.department._id);
       loadDepartments();
       loadUsers();
@@ -122,7 +139,9 @@ const ManageDepartments = () => {
   // Anyone not already in the department being viewed.
   const selectedId = String(selected?.department?._id || '');
   const candidates = assignableUsers.filter(
-    (user) => String(user.department?._id || user.department || '') !== selectedId
+    (user) => !(user.memberships || []).some(
+      (m) => String(m.department?._id || m.department || '') === selectedId
+    )
   );
 
   return (
@@ -188,6 +207,21 @@ const ManageDepartments = () => {
                       member{department.memberCount === 1 ? '' : 's'}
                     </p>
 
+                    <div className="flex items-center gap-4 mt-3 pt-3 hairline">
+                      <span className="field-label">Screens</span>
+                      {[['sales', 'Sales'], ['leads', 'Leads']].map(([key, label]) => (
+                        <label key={key} className="flex items-center gap-1.5 text-xs text-mist cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={(department.modules || []).includes(key)}
+                            onChange={() => toggleModule(department, key)}
+                            className="accent-[#7fc7ff] cursor-pointer"
+                          />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+
                     <button
                       onClick={() => openDepartment(department._id)}
                       className="btn btn-sm mt-4"
@@ -228,6 +262,15 @@ const ManageDepartments = () => {
                   ))}
                 </select>
               </div>
+              <label className="flex items-center gap-2 text-xs text-mist shrink-0 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={asHead}
+                  onChange={(e) => setAsHead(e.target.checked)}
+                  className="accent-[#7fc7ff] cursor-pointer"
+                />
+                as head
+              </label>
               <button onClick={addMember} className="btn shrink-0">
                 Add to department
               </button>
@@ -242,7 +285,11 @@ const ManageDepartments = () => {
                   <span className="text-sm text-beam min-w-0 truncate">
                     {member.name}
                     <span className="chip chip-mist ml-2">
-                      {roleLabel[member.role] || member.role}
+                      {/* Per-department, not the global role: a head of another
+                          department sits here as an ordinary member. */}
+                      {(member.memberships || []).some(
+                        (m) => String(m.department?._id || m.department) === selectedId && m.head
+                      ) ? roleLabel.head : roleLabel.member}
                     </span>
                   </span>
                   <button

@@ -2,7 +2,9 @@ const Department = require('../model/department.model.js');
 const User = require('../model/user.model.js');
 const { headedDepartmentIds, MODULES } = require('../utils/scope.js');
 
-const MEMBER_FIELDS = "name email profileImageUrl role";
+// `memberships` is needed so the UI can say who heads THIS department, as
+// distinct from whoever merely holds the head role.
+const MEMBER_FIELDS = "name email profileImageUrl role memberships";
 
 /** A head may only ever act on a department they actually LEAD - being a rep
  *  in a department grants nothing here. */
