@@ -1,11 +1,14 @@
 const Department = require('../model/department.model.js');
 const User = require('../model/user.model.js');
+const { headedDepartmentIds, MODULES } = require('../utils/scope.js');
 
 const MEMBER_FIELDS = "name email profileImageUrl role";
 
-/** A head may only ever act on the department they belong to. */
+/** A head may only ever act on a department they actually LEAD - being a rep
+ *  in a department grants nothing here. */
 const deniedForHead = (req) =>
-    req.user.role === "head" && String(req.user.department || "") !== String(req.params.id);
+    req.user.role === "head" &&
+    !headedDepartmentIds(req.user).some((id) => String(id) === String(req.params.id));
 
 const createDepartment = async (req, res) => {
     try {
@@ -24,13 +27,14 @@ const createDepartment = async (req, res) => {
     }
 };
 
-// Admins get the whole org; a head only ever sees their own department.
+// Admins get the whole org; a head only ever sees departments they lead.
 const getDepartments = async (req, res) => {
     try {
-        const filter = req.user.role === "head" ? { _id: req.user.department } : {};
-        if (req.user.role === "head" && !req.user.department) {
+        const led = headedDepartmentIds(req.user);
+        if (req.user.role === "head" && !led.length) {
             return res.json({ departments: [] });
         }
+        const filter = req.user.role === "head" ? { _id: { $in: led } } : {};
 
         const departments = await Department.find(filter).sort({ name: 1 }).lean();
 
@@ -38,7 +42,7 @@ const getDepartments = async (req, res) => {
         // single $group aggregate if that ever stops being true.
         const withCounts = await Promise.all(departments.map(async (department) => ({
             ...department,
-            memberCount: await User.countDocuments({ department: department._id }),
+            memberCount: await User.countDocuments({ 'memberships.department': department._id }),
         })));
 
         res.json({ departments: withCounts });
@@ -49,13 +53,22 @@ const getDepartments = async (req, res) => {
 
 const updateDepartment = async (req, res) => {
     try {
-        const name = (req.body.name || "").trim();
-        if (!name) {
-            return res.status(400).json({ message: "Department name is required" });
+        const changes = {};
+        if (req.body.name !== undefined) {
+            const name = (req.body.name || "").trim();
+            if (!name) {
+                return res.status(400).json({ message: "Department name is required" });
+            }
+            changes.name = name;
+        }
+        // Filtered against the enum: an unknown string would fail validation on
+        // save and 500, and silently dropping it is the kinder failure.
+        if (req.body.modules !== undefined) {
+            changes.modules = (req.body.modules || []).filter((m) => MODULES.includes(m));
         }
 
         const department = await Department.findByIdAndUpdate(
-            req.params.id, { name }, { new: true }
+            req.params.id, changes, { new: true }
         );
         if (!department) {
             return res.status(404).json({ message: "Department not found" });
@@ -79,7 +92,10 @@ const deleteDepartment = async (req, res) => {
 
         // Members outlive their department - detach them rather than orphaning
         // a dangling reference that every scope query would then have to guard.
-        await User.updateMany({ department: department._id }, { $set: { department: null } });
+        await User.updateMany(
+            { 'memberships.department': department._id },
+            { $pull: { memberships: { department: department._id } } }
+        );
         await department.deleteOne();
 
         res.json({ message: "Department deleted successfully" });
@@ -99,7 +115,7 @@ const getDepartmentMembers = async (req, res) => {
             return res.status(404).json({ message: "Department not found" });
         }
 
-        const members = await User.find({ department: department._id })
+        const members = await User.find({ 'memberships.department': department._id })
             .select(MEMBER_FIELDS)
             .sort({ name: 1 });
 
@@ -124,12 +140,25 @@ const addDepartmentMember = async (req, res) => {
             return res.status(400).json({ message: "Admins do not belong to a department" });
         }
 
-        // One head per department. Moving a head in while another already holds
-        // the post would leave two people with assign rights over the same team.
-        if (user.role === "head") {
+        const wantsHead = Boolean(req.body.head);
+
+        // Headship is a role-level privilege, so a member cannot be made head of
+        // anything - otherwise adding a rep to a department would hand them
+        // assign rights over the whole team.
+        if (wantsHead && user.role !== "head") {
+            return res.status(400).json({ message: "Only a user with the head role can lead a department" });
+        }
+
+        if (user.memberships.some((m) => String(m.department) === String(department._id))) {
+            return res.status(409).json({ message: `${user.name} is already in this department` });
+        }
+
+        // One head per department. Two people with assign rights over the same
+        // team is the thing this prevents; one person heading TWO departments is
+        // fine and deliberate.
+        if (wantsHead) {
             const existingHead = await User.findOne({
-                department: department._id,
-                role: "head",
+                memberships: { $elemMatch: { department: department._id, head: true } },
                 _id: { $ne: user._id },
             });
             if (existingHead) {
@@ -139,7 +168,7 @@ const addDepartmentMember = async (req, res) => {
             }
         }
 
-        user.department = department._id;
+        user.memberships.push({ department: department._id, head: wantsHead });
         await user.save();
 
         res.json({
@@ -157,11 +186,14 @@ const removeDepartmentMember = async (req, res) => {
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
-        if (String(user.department || "") !== String(req.params.id)) {
+        const before = user.memberships.length;
+        user.memberships = user.memberships.filter(
+            (m) => String(m.department) !== String(req.params.id)
+        );
+        if (user.memberships.length === before) {
             return res.status(400).json({ message: "User is not in this department" });
         }
 
-        user.department = null;
         await user.save();
 
         res.json({ message: "Member removed from department" });
