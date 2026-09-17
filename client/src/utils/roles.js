@@ -12,3 +12,9 @@ export const homeFor = (user) => `${basePathFor(user)}/dashboard`;
 
 /** Roles that may create and assign tasks. */
 export const canAssignTasks = (user) => user?.role === 'admin' || user?.role === 'head';
+
+/**
+ * Which screens this user's departments grant. The server computes it and
+ * sends it on the profile, so the rule has exactly one implementation.
+ */
+export const hasModule = (user, name) => (user?.modules || []).includes(name);

@@ -3,6 +3,7 @@ import { LuSmartphone } from 'react-icons/lu';
 import { UserContext } from '../../context/userContext';
 import { useNavigate } from 'react-router-dom';
 import { SIDE_MENU_DATA, SIDE_MENU_USER_DATA, SIDE_MENU_HEAD_DATA } from '../../utils/data';
+import { hasModule } from '../../utils/roles';
 
 const ROLE_BADGE = {
   admin: { label: 'Admin', className: 'chip chip-signal' },
@@ -36,7 +37,10 @@ const SideMenu = ({ activeMenu, onNavigate, variant = 'rail' }) => {
         admin: SIDE_MENU_DATA,
         head: SIDE_MENU_HEAD_DATA,
       };
-      setSideMenuData(menuByRole[user?.role] || SIDE_MENU_USER_DATA);
+      // An untagged entry always shows; a tagged one needs its module, so a
+      // department that grants nothing simply has no Sales or Leads link.
+      const menu = menuByRole[user?.role] || SIDE_MENU_USER_DATA;
+      setSideMenuData(menu.filter((item) => !item.module || hasModule(user, item.module)));
     }
   }, [user]);
 
