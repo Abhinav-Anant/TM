@@ -17,7 +17,13 @@ const mongoose = require('mongoose');
 
 // Which department grants which screen. Matched by name, once, here - after
 // this the tick boxes live in the database and an admin edits them in the UI.
-const GRANTS = { Sales: ['sales', 'leads'], Marketing: ['leads'] };
+// 'Field Sales' is the team that actually owns every lead on production; the
+// empty 'Sales' department is ticked too, ready for when it is staffed.
+const GRANTS = {
+    Sales: ['sales', 'leads'],
+    'Field Sales': ['sales', 'leads'],
+    Marketing: ['leads'],
+};
 
 (async () => {
     await mongoose.connect(process.env.MONGO_URI);
