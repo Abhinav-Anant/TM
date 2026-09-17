@@ -104,7 +104,7 @@ const clean = async () => {
     for (const name of DEPARTMENTS) {
         const dept = await Department.findOne({ name });
         if (!dept) continue;
-        const remaining = await User.countDocuments({ department: dept._id });
+        const remaining = await User.countDocuments({ 'memberships.department': dept._id });
         if (remaining === 0) {
             await Department.deleteOne({ _id: dept._id });
             removedDepartments += 1;
@@ -143,7 +143,10 @@ const seed = async () => {
                 password: hashed,
                 role: person.role,
                 phone,
-                department: departments[person.department]._id,
+                memberships: [{
+                    department: departments[person.department]._id,
+                    head: person.role === 'head',
+                }],
             },
             { upsert: true, new: true, setDefaultsOnInsert: true }
         );
