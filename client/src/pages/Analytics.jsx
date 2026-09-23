@@ -81,7 +81,7 @@ const Analytics = () => {
                                 key={range}
                                 aria-pressed={days === range}
                                 className={`relative text-xs px-3.5 py-1.5 rounded-lg cursor-pointer transition-colors num ${
-                                    days === range ? "text-void" : "text-mist hover:text-beam"
+                                    days === range ? "text-ink" : "text-mist hover:text-beam"
                                 }`}
                                 onClick={() => setDays(range)}
                             >

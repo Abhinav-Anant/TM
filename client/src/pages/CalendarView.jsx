@@ -144,7 +144,7 @@ const CalendarView = () => {
                                             <span
                                                 className={`inline-grid place-items-center w-6 h-6 text-[11px] font-medium rounded-full num ${
                                                     isToday
-                                                        ? "bg-signal text-void shadow-[0_0_12px_-2px_rgba(255,176,32,0.9)]"
+                                                        ? "bg-signal text-ink shadow-[0_0_12px_-2px_rgba(255,176,32,0.9)]"
                                                         : "text-mist"
                                                 }`}
                                             >

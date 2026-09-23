@@ -1,4 +1,5 @@
 import React from 'react';
+import ThemeToggle from './ThemeToggle';
 
 /**
  * The hero is the product, not a picture of one: a slice of work suspended in
@@ -20,6 +21,7 @@ const AuthLayout = ({ children }) => {
             <span className="w-2.5 h-2.5 rounded-full bg-signal shadow-[0_0_14px_3px_rgba(255,176,32,0.65)]" />
           </span>
           <span className="font-display text-base font-semibold text-beam">Task Manager</span>
+          <div className="ml-auto"><ThemeToggle /></div>
         </div>
 
         <div className="flex-1 flex flex-col justify-center py-10">{children}</div>

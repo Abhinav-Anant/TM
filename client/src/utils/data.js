@@ -177,13 +177,14 @@ export const SORT_OPTIONS = [
   { label: "Title (A-Z)", value: "title:asc" },
 ];
 
+// Hues live in index.css (--cat-N) so each theme can set its own.
 export const CATEGORY_COLORS = [
-  "text-[#7fc7ff] bg-[#7fc7ff]/10 border-[#7fc7ff]/25",
-  "text-[#c4b5fd] bg-[#c4b5fd]/10 border-[#c4b5fd]/25",
-  "text-[#5eead4] bg-[#5eead4]/10 border-[#5eead4]/25",
-  "text-[#fdba74] bg-[#fdba74]/10 border-[#fdba74]/25",
-  "text-[#f9a8d4] bg-[#f9a8d4]/10 border-[#f9a8d4]/25",
-  "text-[#a5b4fc] bg-[#a5b4fc]/10 border-[#a5b4fc]/25",
+  "text-(--cat-1) bg-(--cat-1)/10 border-(--cat-1)/25",
+  "text-(--cat-2) bg-(--cat-2)/10 border-(--cat-2)/25",
+  "text-(--cat-3) bg-(--cat-3)/10 border-(--cat-3)/25",
+  "text-(--cat-4) bg-(--cat-4)/10 border-(--cat-4)/25",
+  "text-(--cat-5) bg-(--cat-5)/10 border-(--cat-5)/25",
+  "text-(--cat-6) bg-(--cat-6)/10 border-(--cat-6)/25",
 ];
 
 // Stable colour per category name without keeping a colour map in sync.
@@ -242,7 +243,8 @@ export const PRIORITY_CHART_COLORS = { Low: "#059669", Medium: "#d97706", High: 
 
 /** Chart chrome, so axes and grids stay recessive against the panel. */
 export const CHART_INK = {
-  grid: "rgba(148,178,255,0.09)",
-  axis: "rgba(159,176,206,0.55)",
-  label: "#9fb0ce",
+  // CSS variables, so the charts follow the light/dark theme.
+  grid: "var(--chart-grid)",
+  axis: "var(--chart-axis)",
+  label: "var(--color-mist)",
 };

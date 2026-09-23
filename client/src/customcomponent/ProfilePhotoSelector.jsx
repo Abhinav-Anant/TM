@@ -51,7 +51,7 @@ const ProfilePhotoSelector = ({ image, setImage }) => {
                     className={`absolute -bottom-1 -right-1 w-8 h-8 grid place-items-center rounded-full cursor-pointer transition-colors ${
                         previewUrl
                             ? 'bg-alert/20 text-alert border border-alert/40 hover:bg-alert/30'
-                            : 'bg-signal text-void hover:brightness-110'
+                            : 'bg-signal text-ink hover:brightness-110'
                     }`}
                 >
                     {previewUrl ? <LuTrash /> : <LuUpload />}
