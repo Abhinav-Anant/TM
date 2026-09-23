@@ -1,5 +1,5 @@
 import axios from "axios";
-import { BASE_URL } from "./apiPaths"; 
+import { BASE_URL, API_PATHS } from "./apiPaths";
 
 // Create axios instance
 const axiosInstance = axios.create({
@@ -33,8 +33,9 @@ axiosInstance.interceptors.response.use(
   (error) => {
     // Handle errors globally (optional)
     if(error.response){
-        if (error.response && error.response.status === 401) {
-            // Example: Redirect to login on unauthorized (401)
+        // A 401 from the login call itself is a wrong password, not an expired
+        // session: redirecting would reload the page and wipe the error message.
+        if (error.response.status === 401 && error.config?.url !== API_PATHS.AUTH.LOGIN) {
             window.location.href = "/login";
           }else if(error.response.status===500){
             console.error("Server error, Please try again")

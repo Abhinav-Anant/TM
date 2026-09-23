@@ -375,8 +375,14 @@ const logOutcome = async (req, res) => {
         // A closed lead gets no successor - dead work does not belong in
         // anyone's Today list. The response says so rather than staying silent.
         let nextTask = null;
-        if (nextFollowUp && !CLOSED_STAGES.includes(lead.stage)) {
-            nextTask = await createFollowUp({ lead, actor: req.user, dueDate: nextFollowUp, title: nextTitle });
+        if (!CLOSED_STAGES.includes(lead.stage)) {
+            // Closing the last open task without naming a successor would leave an
+            // open lead with no next action; fall back to createFollowUp's default date.
+            const needsOne = nextFollowUp
+                || !(await Task.exists({ lead: lead._id, status: { $ne: "Completed" } }));
+            if (needsOne) {
+                nextTask = await createFollowUp({ lead, actor: req.user, dueDate: nextFollowUp, title: nextTitle });
+            }
         }
 
         res.json({

@@ -73,7 +73,7 @@ const Leads = () => {
             </p>
           </div>
           <button onClick={() => setShowForm((open) => !open)} className="btn btn-primary shrink-0">
-            <LuPlus /> {showForm ? 'Cancel' : 'Add lead'}
+            {showForm ? 'Cancel' : <><LuPlus /> Add lead</>}
           </button>
         </div>
 

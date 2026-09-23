@@ -940,9 +940,17 @@ const waitForServer = async () => {
             token: R, body: { outcome: "Maybe" },
         })).status, 400, "an unknown outcome is rejected");
 
+        // Closing the only open task without naming a successor must not leave an
+        // open lead with no next action.
+        const unnamed = await call("POST", `/api/leads/${pqr}/outcome`, {
+            token: R, body: { taskId: logged.body.nextTask._id, outcome: "Follow-up required" },
+        });
+        assert.strictEqual(unnamed.status, 200, `outcome failed: ${unnamed.text}`);
+        assert.ok(unnamed.body.nextTask, "an open lead whose last task was closed gets a default follow-up");
+
         // Closing the lead must suppress the successor rather than queue dead work.
         const closed = await call("POST", `/api/leads/${pqr}/outcome`, {
-            token: R, body: { taskId: logged.body.nextTask._id, outcome: "Not interested", nextFollowUp: day(5) },
+            token: R, body: { taskId: unnamed.body.nextTask._id, outcome: "Not interested", nextFollowUp: day(5) },
         });
         assert.strictEqual(closed.body.lead.stage, "Lost");
         assert.ok(closed.body.lead.closedAt, "closing through an outcome stamps closedAt");
