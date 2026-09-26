@@ -32,6 +32,22 @@ const ViewTaskDetails = () => {
     }
   };
 
+  // Asking for Completed is enough: the server turns it into In Review when
+  // the task needs sign-off from someone else. Refetch because the status
+  // response is not populated.
+  const finish = async () => {
+    setReviewing(true);
+    try {
+      const { data } = await axiosInstance.put(API_PATHS.TASKS.UPDATE_TASK_STATUS(id), { status: "Completed" });
+      await getTaskDetailsById();
+      toast.success(data.updatedTask?.status === "In Review" ? "Submitted for review" : "Marked as done");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "That did not go through.");
+    } finally {
+      setReviewing(false);
+    }
+  };
+
   const getTaskDetailsById = async () => {
     try {
       const response = await axiosInstance.get(API_PATHS.TASKS.GET_TASK_BY_ID(id));
@@ -165,6 +181,11 @@ const ViewTaskDetails = () => {
           )}
           {task.status === "In Review" && !task.canReview && (
             <p className="text-sm text-signal">Submitted. Waiting for approval.</p>
+          )}
+          {!["In Review", "Completed"].includes(task.status) && (
+            <button className="btn btn-primary w-full" disabled={reviewing} onClick={finish}>
+              {task.requiresReview && !task.canReview ? "Submit for review" : "Mark as done"}
+            </button>
           )}
 
           <div>
