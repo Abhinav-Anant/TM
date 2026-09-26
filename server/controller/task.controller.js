@@ -115,21 +115,29 @@ const spawnNext = async (task) => {
     if (!claim.modifiedCount) return null;
     task.nextTask = nextId;
 
-    const next = await Task.create({
-        _id: nextId,
-        title: task.title,
-        description: task.description,
-        category: task.category,
-        priority: task.priority,
-        dueDate: nextDueDate(task.dueDate, task.recurrence),
-        assignedTo: task.assignedTo,
-        createdBy: task.createdBy,
-        attachments: task.attachments,
-        todoChecklist: task.todoChecklist.map((item) => ({ text: item.text, completed: false })),
-        requiresReview: task.requiresReview,
-        recurrence: task.recurrence,
-        lead: task.lead,
-    });
+    let next;
+    try {
+        next = await Task.create({
+            _id: nextId,
+            title: task.title,
+            description: task.description,
+            category: task.category,
+            priority: task.priority,
+            dueDate: nextDueDate(task.dueDate, task.recurrence),
+            assignedTo: task.assignedTo,
+            createdBy: task.createdBy,
+            attachments: task.attachments,
+            todoChecklist: task.todoChecklist.map((item) => ({ text: item.text, completed: false })),
+            requiresReview: task.requiresReview,
+            recurrence: task.recurrence,
+        });
+    } catch (error) {
+        // The claim above already marked this task as spawned - release it so a
+        // failed create here doesn't permanently block the recurrence.
+        await Task.updateOne({ _id: task._id, nextTask: nextId }, { $set: { nextTask: null } });
+        task.nextTask = null;
+        throw error;
+    }
 
     // No actor: the person who completed the last one still needs to hear about the next.
     await notify({
@@ -147,6 +155,7 @@ const afterStatusChange = async (task, previousStatus, actor) => {
     if (previousStatus === task.status) return;
 
     if (task.status === "Completed") {
+        await spawnNext(task);
         await notify({
             userIds: await completionWatchers(task),
             actor,
@@ -155,7 +164,6 @@ const afterStatusChange = async (task, previousStatus, actor) => {
             title: `${task.title} is now Completed`,
             message: `${actor.name} moved "${task.title}" from ${previousStatus} to Completed.`,
         });
-        await spawnNext(task);
     } else if (task.status === "In Review") {
         await notify({
             userIds: await reviewersOf(task),
@@ -554,13 +562,16 @@ const updateTask = async (req, res) => {
 };
 
 /** Recomputes progress + status from the checklist. A finished task that needs sign-off stops at In Review. */
-const syncProgress = (task, { needsReview = false } = {}) => {
+const syncProgress = (task, { needsReview = false, wasCompleted = false } = {}) => {
     const total = task.todoChecklist.length;
     const done = task.todoChecklist.filter((item) => item.completed).length;
     task.progress = total > 0 ? Math.round((done / total) * 100) : 0;
 
-    if (total > 0 && task.progress === 100) task.status = needsReview ? "In Review" : "Completed";
-    else if (task.progress > 0) task.status = "In Progress";
+    if (total > 0 && task.progress === 100) {
+        // Already signed off and still fully checked - a checklist edit that
+        // doesn't drop below 100% must not re-demote it back to In Review.
+        task.status = wasCompleted ? "Completed" : needsReview ? "In Review" : "Completed";
+    } else if (task.progress > 0) task.status = "In Progress";
     else task.status = "Pending";
 
     task.completedAt = task.status === "Completed" ? (task.completedAt || new Date()) : null;
@@ -581,7 +592,10 @@ const updateTaskCheckList = async (req, res) => {
 
         const previousStatus = task.status;
         task.todoChecklist = todoChecklist;
-        syncProgress(task, { needsReview: task.requiresReview && !await canReview(req.user, task) });
+        syncProgress(task, {
+            needsReview: task.requiresReview && !await canReview(req.user, task),
+            wasCompleted: previousStatus === "Completed",
+        });
         await task.save();
 
         // Ticking boxes is routine; only finishing (or submitting for review) is news.
@@ -616,7 +630,10 @@ const updateTaskStatus = async (req, res) => {
 
         const previousStatus = task.status;
 
-        if (wanted === "Completed") {
+        if (wanted === "Completed" && task.status === "Completed") {
+            // Already signed off - re-requesting Completed is a no-op, not a
+            // fresh submission that could get demoted back to In Review.
+        } else if (wanted === "Completed") {
             markCompleted(task);
             if (task.requiresReview && !await canReview(req.user, task)) {
                 task.status = "In Review";

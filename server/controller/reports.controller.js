@@ -73,6 +73,7 @@ const exportUsersReport = async (req, res) => {
                 taskCount: 0,
                 pendingTasks: 0,
                 inProgressTasks: 0,
+                inReviewTasks: 0,
                 completedTasks: 0,
             };
         });
@@ -86,6 +87,8 @@ const exportUsersReport = async (req, res) => {
                             userTaskMap[assignedUser._id].pendingTasks += 1;
                         } else if (task.status === "In Progress") {
                             userTaskMap[assignedUser._id].inProgressTasks += 1;
+                        } else if (task.status === "In Review") {
+                            userTaskMap[assignedUser._id].inReviewTasks += 1;
                         } else if (task.status === "Completed") {
                             userTaskMap[assignedUser._id].completedTasks += 1;
                         }
@@ -105,6 +108,7 @@ const exportUsersReport = async (req, res) => {
             { header: "Total Assigned Task", key: "taskCount", width: 20 },
             { header: "Pending Tasks", key: "pendingTasks", width: 20 },
             { header: "In Progress Tasks", key: "inProgressTasks", width: 20 },
+            { header: "In Review Tasks", key: "inReviewTasks", width: 20 },
             { header: "Completed Tasks", key: "completedTasks", width: 20 },
         ];
 
@@ -116,6 +120,7 @@ const exportUsersReport = async (req, res) => {
                 taskCount: userTaskMap[user._id].taskCount,
                 pendingTasks: userTaskMap[user._id].pendingTasks,
                 inProgressTasks: userTaskMap[user._id].inProgressTasks,
+                inReviewTasks: userTaskMap[user._id].inReviewTasks,
                 completedTasks: userTaskMap[user._id].completedTasks,
             });
         });

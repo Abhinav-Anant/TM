@@ -742,6 +742,10 @@ const waitForServer = async () => {
         assert.strictEqual(
             (await call("PUT", `/api/tasks/${gst._id}/review`, { token: H, body: { action: "maybe" } })).status,
             400, "unknown review action");
+        // secondHead ("Hugo Head") heads no department at all - not this task's assignee's department.
+        assert.strictEqual(
+            (await call("PUT", `/api/tasks/${gst._id}/review`, { token: secondHead.token, body: { action: "approve" } })).status,
+            403, "a head of an unrelated department cannot review");
 
         // Send back with a note: back to In Progress, note lands as a comment.
         r = await call("PUT", `/api/tasks/${gst._id}/review`, { token: H, body: { action: "reject", note: "Attach the challan" } });
@@ -765,6 +769,20 @@ const waitForServer = async () => {
         assert.ok(r.body.task.completedAt, "approval stamps completedAt");
         const nextId = r.body.task.nextTask;
         assert.ok(nextId, "a recurring task spawns its next copy on completion");
+        const approvedAt = r.body.task.completedAt;
+
+        // Re-requesting Completed on already-approved work is a no-op, not a fresh
+        // submission that could get demoted back to In Review.
+        r = await call("PUT", `/api/tasks/${gst._id}/status`, { token: SM, body: { status: "Completed" } });
+        assert.strictEqual(r.status, 200);
+        assert.strictEqual(r.body.updatedTask.status, "Completed", "already-completed work isn't demoted back to review");
+        assert.strictEqual(r.body.updatedTask.completedAt, approvedAt, "completedAt isn't reset");
+
+        // Same for the checklist route: still 100% must not reopen it either.
+        r = await call("PUT", `/api/tasks/${gst._id}/todo`, {
+            token: SM, body: { todoChecklist: [{ text: "collect invoices", completed: true }] },
+        });
+        assert.strictEqual(r.body.task.status, "Completed", "checklist staying at 100% doesn't reopen a completed task");
 
         const next = (await call("GET", `/api/tasks/${nextId}`, { token: A })).body;
         assert.strictEqual(next.title, "File the GST return");
@@ -805,6 +823,16 @@ const waitForServer = async () => {
 
         await sleep(4000);
         assert.strictEqual((await escalationsFor(H)).length, 1, "escalation is sent once, not every scan");
+
+        // A task abandoned long past the escalation window (default 2-9 days) must not
+        // alert on every scan after deploy - it's already old news, not a fresh escalation.
+        const ancient = (await call("POST", "/api/tasks", {
+            token: A, body: { title: "Ancient forgotten invoice", dueDate: day(-30), assignedTo: [salesMember._id] },
+        })).body.task;
+        const ancientEscalationsFor = async (token) => (await call("GET", "/api/notifications?limit=100", { token }))
+            .body.notifications.filter((n) => n.type === "escalation" && String(n.task?._id || n.task) === ancient._id);
+        await sleep(4000);
+        assert.strictEqual((await ancientEscalationsFor(H)).length, 0, "a task overdue well past the window is not escalated");
         pass("Overdue escalation", "head + creator alerted once when a task is 2+ days overdue");
 
         // And so is the assignable-people list.

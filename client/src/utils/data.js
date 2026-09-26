@@ -248,7 +248,7 @@ export const priorityFill = (priority) => ({
  * (worst adjacent CVD dE 13.7); priority sits in the 6-8 CVD floor band at 7.9,
  * which holds because every bar is labelled on the x-axis.
  */
-export const STATUS_CHART_COLORS = ["#8b5cf6", "#0369a1", "#059669"];
+export const STATUS_CHART_COLORS = ["#8b5cf6", "#0369a1", "#ffb020", "#059669"];
 export const PRIORITY_CHART_COLORS = { Low: "#059669", Medium: "#d97706", High: "#e11d48" };
 
 /** Chart chrome, so axes and grids stay recessive against the panel. */

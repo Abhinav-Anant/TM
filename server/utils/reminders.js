@@ -7,7 +7,17 @@ const MINUTE = 60 * 1000;
 const WINDOW_HOURS = Number(process.env.REMINDER_WINDOW_HOURS) || 24;
 const INTERVAL_MINUTES = Number(process.env.REMINDER_INTERVAL_MINUTES) || 15;
 const DAY = 24 * 60 * MINUTE;
-const ESCALATE_AFTER_DAYS = Number(process.env.ESCALATE_AFTER_DAYS ?? 2);
+
+const parseEscalateAfterDays = (raw) => {
+    const trimmed = String(raw ?? "").trim();
+    const parsed = Number(trimmed);
+    return trimmed !== "" && Number.isFinite(parsed) && parsed >= 0 ? parsed : 2;
+};
+const ESCALATE_AFTER_DAYS = parseEscalateAfterDays(process.env.ESCALATE_AFTER_DAYS);
+// Bounds each scan to a window rather than "overdue by at least N days forever":
+// stops the first scan after deploy from alerting on every long-abandoned task,
+// and keeps each scan bounded.
+const ESCALATION_WINDOW_DAYS = 7;
 
 const formatDate = (date) => new Date(date).toDateString();
 
@@ -56,7 +66,8 @@ const scanDeadlines = async () => {
  */
 const scanEscalations = async (now = new Date()) => {
     const cutoff = new Date(now.getTime() - ESCALATE_AFTER_DAYS * DAY);
-    const tasks = await Task.find({ status: { $ne: "Completed" }, dueDate: { $lt: cutoff } })
+    const windowStart = new Date(now.getTime() - (ESCALATE_AFTER_DAYS + ESCALATION_WINDOW_DAYS) * DAY);
+    const tasks = await Task.find({ status: { $ne: "Completed" }, dueDate: { $lt: cutoff, $gte: windowStart } })
         .select("title dueDate assignedTo createdBy");
 
     let sentCount = 0;

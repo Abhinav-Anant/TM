@@ -67,6 +67,14 @@ const Analytics = () => {
         label: moment(point.date).format("D MMM"),
     }));
 
+    // Server groups byStatus alphabetically by _id, not in the fixed status order
+    // the chart colours are indexed by - reorder before handing it to the pie.
+    const STATUS_ORDER = ["Pending", "In Progress", "In Review", "Completed"];
+    const byStatusCounts = Object.fromEntries((data?.byStatus || []).map((g) => [g.status, g.count]));
+    const byStatus = STATUS_ORDER
+        .filter((status) => byStatusCounts[status] !== undefined)
+        .map((status) => ({ status, count: byStatusCounts[status] }));
+
     return (
         <DashboardLayout activeMenu="Analytics">
             <div className="py-6">
@@ -120,8 +128,8 @@ const Analytics = () => {
                                             <stop offset="95%" stopColor={STATUS_CHART_COLORS[0]} stopOpacity={0} />
                                         </linearGradient>
                                         <linearGradient id="completedFill" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor={STATUS_CHART_COLORS[2]} stopOpacity={0.45} />
-                                            <stop offset="95%" stopColor={STATUS_CHART_COLORS[2]} stopOpacity={0} />
+                                            <stop offset="5%" stopColor={STATUS_CHART_COLORS[3]} stopOpacity={0.45} />
+                                            <stop offset="95%" stopColor={STATUS_CHART_COLORS[3]} stopOpacity={0} />
                                         </linearGradient>
                                     </defs>
                                     <CartesianGrid vertical={false} stroke={CHART_INK.grid} />
@@ -143,7 +151,7 @@ const Analytics = () => {
                                     <Tooltip content={<CustomTooltip />} cursor={{ stroke: CHART_INK.axis, strokeDasharray: '4 4' }} />
                                     <Legend wrapperStyle={{ fontSize: 12, color: CHART_INK.label }} iconType="square" iconSize={10} />
                                     <Area type="monotone" name="Created" dataKey="created" stroke={STATUS_CHART_COLORS[0]} fill="url(#createdFill)" strokeWidth={2} />
-                                    <Area type="monotone" name="Completed" dataKey="completed" stroke={STATUS_CHART_COLORS[2]} fill="url(#completedFill)" strokeWidth={2} />
+                                    <Area type="monotone" name="Completed" dataKey="completed" stroke={STATUS_CHART_COLORS[3]} fill="url(#completedFill)" strokeWidth={2} />
                                 </AreaChart>
                             </ResponsiveContainer>
                         </div>
@@ -151,7 +159,7 @@ const Analytics = () => {
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
                             <div className="panel p-6">
                                 <h3 className="font-display text-base text-beam">Tasks by status</h3>
-                                <CustomPieChart data={data?.byStatus || []} />
+                                <CustomPieChart data={byStatus} />
                             </div>
 
                             <div className="panel p-6">
