@@ -148,8 +148,9 @@ const ViewTaskDetails = () => {
         <aside className="panel p-6 lg:sticky lg:top-[89px] space-y-6">
           {task.status === "In Review" && task.canReview && (
             <div className="space-y-3">
-              <p className="field-label">Waiting for your review</p>
+              <label className="field-label" htmlFor="review-note">Waiting for your review</label>
               <textarea
+                id="review-note"
                 className="field"
                 rows={3}
                 placeholder="Note for the assignee (sent with Send back)"

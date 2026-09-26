@@ -275,8 +275,8 @@ const CreateTask = () => {
                 />
               </div>
 
-              <div>
-                <span className="field-label">Repeat</span>
+              <div role="group" aria-labelledby="task-recurrence-label">
+                <span id="task-recurrence-label" className="field-label">Repeat</span>
                 <SelectDropdown
                   options={RECURRENCE_DATA}
                   value={taskData.recurrence}
