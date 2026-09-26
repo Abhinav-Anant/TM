@@ -9,6 +9,7 @@ const { buildFilters, buildSort, syncProgress, escapeRegex } = require("./contro
 const { addClient, push, connectionCount } = require("./utils/sse.js");
 const { normalizePhone } = require("./utils/phone.js");
 const { parseMembersCsv } = require("./utils/csv.js");
+const { nextDueDate, RECURRENCES } = require("./utils/recurrence.js");
 
 // buildFilters now takes an already-resolved scope (see server/utils/scope.js)
 // rather than a user, which keeps it pure and synchronous.
@@ -114,6 +115,34 @@ assert.deepStrictEqual(buildSort({}), { createdAt: -1 });
     syncProgress(task);
     assert.strictEqual(task.progress, 0);
     assert.strictEqual(task.status, "Pending");
+}
+
+// --- recurrence -----------------------------------------------------------
+{
+    const at = (s) => new Date(s);
+    const before = at("2026-01-05T00:00:00Z");
+    const iso = (d) => d.toISOString().slice(0, 10);
+
+    assert.deepStrictEqual(RECURRENCES, ["none", "daily", "weekly", "monthly"]);
+    assert.strictEqual(nextDueDate(at("2026-01-10T00:00:00Z"), "none", before), null);
+    assert.strictEqual(nextDueDate(at("2026-01-10T00:00:00Z"), "bogus", before), null);
+
+    assert.strictEqual(iso(nextDueDate(at("2026-01-10T00:00:00Z"), "daily", before)), "2026-01-11");
+    assert.strictEqual(iso(nextDueDate(at("2026-01-10T00:00:00Z"), "weekly", before)), "2026-01-17");
+    assert.strictEqual(iso(nextDueDate(at("2026-01-10T00:00:00Z"), "monthly", before)), "2026-02-10");
+
+    // Month end clamps instead of spilling into the next month.
+    assert.strictEqual(iso(nextDueDate(at("2026-01-31T00:00:00Z"), "monthly", before)), "2026-02-28");
+    assert.strictEqual(iso(nextDueDate(at("2028-01-31T00:00:00Z"), "monthly", at("2028-01-01"))), "2028-02-29", "leap year");
+
+    // Completed late: skip ahead until the date is in the future, never spawn an overdue copy.
+    assert.strictEqual(
+        iso(nextDueDate(at("2026-01-10T00:00:00Z"), "daily", at("2026-01-15T10:00:00Z"))), "2026-01-16");
+    // Skipping stays anchored to the original day: 31 Jan -> 31 Mar, not 28 Mar.
+    assert.strictEqual(
+        iso(nextDueDate(at("2026-01-31T00:00:00Z"), "monthly", at("2026-03-05T00:00:00Z"))), "2026-03-31");
+    // String input (as stored JSON) works too.
+    assert.strictEqual(iso(nextDueDate("2026-01-10T00:00:00.000Z", "weekly", before)), "2026-01-17");
 }
 
 // --- SSE registry ---------------------------------------------------------
