@@ -786,6 +786,27 @@ const waitForServer = async () => {
         assert.strictEqual(typeof summary.inReviewTasks, "number", "In Review has its own tab count");
         pass("Review step & recurrence", "submit->review->send back->resubmit->approve; one next copy; reviewer completes directly");
 
+        // ---------- OVERDUE ESCALATION ----------
+        const stuck = (await call("POST", "/api/tasks", {
+            token: A, body: { title: "Stuck vendor payment", dueDate: day(-5), assignedTo: [salesMember._id] },
+        })).body.task;
+        const escalationsFor = async (token) => (await call("GET", "/api/notifications?limit=100", { token }))
+            .body.notifications.filter((n) => n.type === "escalation" && String(n.task?._id || n.task) === stuck._id);
+
+        let headEsc = [];
+        for (let i = 0; i < 20; i += 1) {
+            await sleep(1000);
+            headEsc = await escalationsFor(H);
+            if (headEsc.length) break;
+        }
+        assert.strictEqual(headEsc.length, 1, "the assignee's head hears about a task stuck overdue");
+        assert.strictEqual((await escalationsFor(A)).length, 1, "so does the creator");
+        assert.strictEqual((await escalationsFor(SM)).length, 0, "the assignee already gets the overdue alert");
+
+        await sleep(4000);
+        assert.strictEqual((await escalationsFor(H)).length, 1, "escalation is sent once, not every scan");
+        pass("Overdue escalation", "head + creator alerted once when a task is 2+ days overdue");
+
         // And so is the assignable-people list.
         const headUsers = (await call("GET", "/api/users", { token: H })).body.map((u) => u.email).sort();
         assert.deepStrictEqual(headUsers, ["head@example.test", "sam@example.test"], "head sees only their department");

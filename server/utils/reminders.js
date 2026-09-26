@@ -1,10 +1,13 @@
 const Task = require('../model/task.model.js');
 const Notification = require('../model/notification.model.js');
 const { notify } = require('./notify.js');
+const { departmentHeadsOf } = require('./scope.js');
 
 const MINUTE = 60 * 1000;
 const WINDOW_HOURS = Number(process.env.REMINDER_WINDOW_HOURS) || 24;
 const INTERVAL_MINUTES = Number(process.env.REMINDER_INTERVAL_MINUTES) || 15;
+const DAY = 24 * 60 * MINUTE;
+const ESCALATE_AFTER_DAYS = Number(process.env.ESCALATE_AFTER_DAYS ?? 2);
 
 const formatDate = (date) => new Date(date).toDateString();
 
@@ -46,9 +49,45 @@ const scanDeadlines = async () => {
     return sentCount;
 };
 
+/**
+ * Tasks still open ESCALATE_AFTER_DAYS past their due date go over the
+ * assignees' heads: the department heads and the task's creator hear about it,
+ * once each per task. The assignees already had their own overdue alert.
+ */
+const scanEscalations = async (now = new Date()) => {
+    const cutoff = new Date(now.getTime() - ESCALATE_AFTER_DAYS * DAY);
+    const tasks = await Task.find({ status: { $ne: "Completed" }, dueDate: { $lt: cutoff } })
+        .select("title dueDate assignedTo createdBy");
+
+    let sentCount = 0;
+
+    for (const task of tasks) {
+        const alreadyAlerted = new Set(
+            (await Notification.find({ task: task._id, type: "escalation" }).distinct("user")).map(String)
+        );
+        const recipients = [...await departmentHeadsOf(task.assignedTo), ...(task.createdBy || [])].map(String);
+        const targets = [...new Set(recipients)].filter((id) => !alreadyAlerted.has(id));
+        if (targets.length === 0) continue;
+
+        const days = Math.floor((now - task.dueDate) / DAY);
+        await notify({
+            userIds: targets,
+            type: "escalation",
+            task: task._id,
+            title: `Escalation: ${task.title}`,
+            message: `"${task.title}" is ${days} days overdue (due ${formatDate(task.dueDate)}) and still open.`,
+        });
+        sentCount += targets.length;
+    }
+
+    return sentCount;
+};
+
 // ponytail: in-process setInterval. Move to a real scheduler (cron/queue) if you run multiple instances.
 const startReminders = () => {
-    const run = () => scanDeadlines().catch((err) => console.error("Reminder scan failed:", err.message));
+    const run = () => scanDeadlines()
+        .then(() => scanEscalations())
+        .catch((err) => console.error("Reminder scan failed:", err.message));
     run();
     const timer = setInterval(run, INTERVAL_MINUTES * MINUTE);
     timer.unref?.();
@@ -56,4 +95,4 @@ const startReminders = () => {
     return timer;
 };
 
-module.exports = { startReminders, scanDeadlines };
+module.exports = { startReminders, scanDeadlines, scanEscalations };
