@@ -89,9 +89,9 @@ const App = () => {
             // came from a different application.
             style: {
               fontSize: '13px',
-              background: 'rgba(14, 21, 36, 0.86)',
-              color: '#eaf1ff',
-              border: '1px solid rgba(148, 178, 255, 0.14)',
+              background: 'color-mix(in srgb, var(--color-hull) 86%, transparent)',
+              color: 'var(--color-beam)',
+              border: '1px solid color-mix(in srgb, var(--color-mist) 22%, transparent)',
               backdropFilter: 'blur(20px) saturate(140%)',
               boxShadow: '0 20px 45px -25px rgba(0,0,0,0.95)',
               borderRadius: '12px',

@@ -2,6 +2,7 @@ import React, { useContext, useEffect, useState } from 'react';
 import { HiOutlineMenu, HiOutlineX } from 'react-icons/hi';
 import SideMenu from './SideMenu';
 import NotificationBell from './NotificationBell';
+import ThemeToggle from './ThemeToggle';
 import { UserContext } from '../../context/userContext';
 
 const Navbar = ({ activeMenu }) => {
@@ -36,11 +37,10 @@ const Navbar = ({ activeMenu }) => {
                 <h1 className="font-display text-base font-semibold text-beam tracking-tight">Task Manager</h1>
             </div>
 
-            {user && (
-                <div className="ml-auto">
-                    <NotificationBell />
-                </div>
-            )}
+            <div className="ml-auto flex items-center gap-1">
+                <ThemeToggle />
+                {user && <NotificationBell />}
+            </div>
 
             {/* Mobile drawer */}
             {openSideMenu && (

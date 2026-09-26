@@ -16,7 +16,7 @@ const TaskStatusTab = ({ tabs, activeTab, setActiveTab }) => {
                         aria-selected={current}
                         onClick={() => setActiveTab(tab.label)}
                         className={`relative flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium whitespace-nowrap cursor-pointer transition-colors duration-200 ${
-                            current ? 'text-void' : 'text-mist hover:text-beam'
+                            current ? 'text-ink' : 'text-mist hover:text-beam'
                         }`}
                     >
                         {/* The lit pill is the selection, so no underline is needed. */}
@@ -26,7 +26,7 @@ const TaskStatusTab = ({ tabs, activeTab, setActiveTab }) => {
                         <span className="relative">{tab.label}</span>
                         <span
                             className={`relative num text-[11px] px-1.5 py-0.5 rounded ${
-                                current ? 'bg-void/20 text-void' : 'bg-white/8 text-mist'
+                                current ? 'bg-ink/20 text-ink' : 'bg-white/8 text-mist'
                             }`}
                         >
                             {tab.count}

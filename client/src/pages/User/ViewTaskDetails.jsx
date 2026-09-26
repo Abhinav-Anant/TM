@@ -243,7 +243,7 @@ const TodoChecklist = ({ text, isChecked, onChange }) => (
       <span
         aria-hidden="true"
         className={`grid place-items-center w-[18px] h-[18px] shrink-0 rounded border transition-colors ${
-          isChecked ? 'bg-done border-done text-void' : 'border-white/25 text-transparent'
+          isChecked ? 'bg-done border-done text-ink' : 'border-white/25 text-transparent'
         } peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-signal peer-focus-visible:outline-offset-2`}
       >
         <LuCheck className="text-[13px]" />

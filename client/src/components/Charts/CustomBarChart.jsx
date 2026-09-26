@@ -28,7 +28,7 @@ const CustomBarChart = ({ data = [] }) => {
           allowDecimals={false}
           width={44}
         />
-        <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(148,178,255,0.05)' }} />
+        <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--chart-grid)' }} />
         <Bar dataKey="count" name="Tasks" radius={[4, 4, 0, 0]} maxBarSize={56}>
           {data.map((entry) => (
             <Cell key={entry.priority} fill={PRIORITY_CHART_COLORS[entry.priority] || '#0369a1'} />
@@ -39,7 +39,7 @@ const CustomBarChart = ({ data = [] }) => {
             dataKey="count"
             position="top"
             offset={8}
-            style={{ fill: '#eaf1ff', fontSize: 12 }}
+            style={{ fill: 'var(--color-beam)', fontSize: 12 }}
           />
         </Bar>
       </BarChart>

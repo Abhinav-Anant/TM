@@ -24,6 +24,8 @@
   --color-beam: #eaf1ff;
   --color-mist: #9fb0ce;
   --color-dusk: #64748b;
+  /* Text on an amber fill. Fixed: it must stay dark in both themes. */
+  --color-ink: #1a1204;
 
   /* Status - semantic, never reused for chrome */
   --color-pending: #a78bfa;
@@ -55,6 +57,61 @@
   --tilt-y: 0deg;
   --spec-x: 50%;
   --spec-y: 0%;
+}
+
+:root {
+  --chart-grid: rgba(148, 178, 255, 0.09);
+  --chart-axis: rgba(159, 176, 206, 0.55);
+}
+
+/* Light theme: set by the toggle as <html data-theme="light">. Utilities read
+   the tokens, so swapping them re-skins most of the app. Remapping `white` to
+   ink turns every bg-white/8, border-white/10 overlay into a dark one. */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --color-void: #eef2f8;
+  --color-hull: #ffffff;
+  --color-deck: #f1f4f9;
+  --color-seam: #d9e1ee;
+  --color-white: #0f172a;
+
+  /* Amber stays bright for fills; amber *text* is darkened further down. */
+  --color-ice: #0b6fb8;
+
+  --color-beam: #0f172a;
+  --color-mist: #475569;
+  --color-dusk: #64748b;
+
+  --color-pending: #7c3aed;
+  --color-active: #0284c7;
+  --color-done: #059669;
+  --color-alert: #e11d48;
+
+  --chart-grid: rgba(15, 23, 42, 0.08);
+  --chart-axis: rgba(71, 85, 105, 0.55);
+
+  --cat-1: #0b6fb8;
+  --cat-2: #6d28d9;
+  --cat-3: #0f766e;
+  --cat-4: #c2410c;
+  --cat-5: #be185d;
+  --cat-6: #4338ca;
+}
+
+/* Category chip hues (CATEGORY_COLORS in utils/data.js). */
+:root {
+  --cat-1: #7fc7ff;
+  --cat-2: #c4b5fd;
+  --cat-3: #5eead4;
+  --cat-4: #fdba74;
+  --cat-5: #f9a8d4;
+  --cat-6: #a5b4fc;
+}
+
+/* Bright amber is unreadable as text on white. Unlayered, so it beats the
+   text-signal utilities; fills (bg-signal) keep the bright amber. */
+:root[data-theme='light'] :is(.text-signal, .hover\:text-signal:hover, .group:hover .group-hover\:text-signal, .is-current, .chip-signal) {
+  color: #a86500;
 }
 
 html {
@@ -105,6 +162,19 @@ body::after {
   mask-image: radial-gradient(120vmax 90vmax at 50% 0%, #000 20%, transparent 75%);
 }
 
+:root[data-theme='light'] body::before {
+  background:
+    radial-gradient(38vmax 38vmax at 18% 10%, rgba(56, 132, 255, 0.16), transparent 64%),
+    radial-gradient(30vmax 30vmax at 86% 24%, rgba(255, 176, 32, 0.14), transparent 62%),
+    radial-gradient(46vmax 46vmax at 64% 98%, rgba(124, 78, 230, 0.12), transparent 66%);
+}
+
+:root[data-theme='light'] body::after {
+  background-image:
+    linear-gradient(rgba(15, 23, 42, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.05) 1px, transparent 1px);
+}
+
 @keyframes drift {
   from { transform: translate3d(-4%, -2%, 0) scale(1); }
   to   { transform: translate3d(5%, 4%, 0) scale(1.12); }
@@ -145,6 +215,7 @@ h1, h2, h3, h4, h5 {
   background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover { background: rgba(127, 199, 255, 0.3); background-clip: content-box; }
+:root[data-theme='light'] ::-webkit-scrollbar-thumb { background: rgba(15, 23, 42, 0.18); background-clip: content-box; }
 
 /* Everything below is component-level. It lives in @layer components so a
    Tailwind utility in the markup (w-auto, py-2, text-lg) still wins - an
@@ -506,6 +577,92 @@ input[type='date'].field::-webkit-calendar-picker-indicator {
   }
 }
 
+/* --------------------------------------------------------------------------
+   Light theme surfaces - the rgba values above are tuned for a dark ground
+   -------------------------------------------------------------------------- */
+
+:root[data-theme='light'] :is(.panel, .card, .form-card, .user-card) {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.78)),
+    rgba(255, 255, 255, 0.7);
+  border-color: rgba(15, 23, 42, 0.08);
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.9) inset,
+    0 18px 40px -28px rgba(15, 23, 42, 0.28);
+}
+
+:root[data-theme='light'] :is(.panel, .card, .form-card, .user-card)::before {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.95), transparent);
+}
+
+:root[data-theme='light'] .panel-raised {
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.9) inset,
+    0 30px 60px -30px rgba(15, 23, 42, 0.35),
+    0 0 0 1px rgba(15, 23, 42, 0.04);
+}
+
+:root[data-theme='light'] .panel-sunken {
+  background: rgba(15, 23, 42, 0.035);
+  border-color: rgba(15, 23, 42, 0.07);
+  box-shadow: 0 2px 8px -6px rgba(15, 23, 42, 0.25) inset;
+}
+
+:root[data-theme='light'] .tilt[data-tilting='true'] {
+  border-color: rgba(11, 111, 184, 0.3);
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.9) inset,
+    0 40px 70px -32px rgba(15, 23, 42, 0.4),
+    0 0 40px -12px rgba(11, 111, 184, 0.25);
+}
+
+:root[data-theme='light'] .tilt-gloss {
+  background: radial-gradient(22rem 22rem at var(--spec-x) var(--spec-y), rgba(255, 255, 255, 0.6), transparent 60%);
+}
+
+:root[data-theme='light'] :is(.btn, .card-btn, .card-btn-fill, .add-btn, .download-btn) {
+  border-color: rgba(15, 23, 42, 0.12);
+  background: rgba(15, 23, 42, 0.035);
+}
+
+:root[data-theme='light'] :is(.btn, .card-btn, .add-btn, .download-btn):hover:not(:disabled) {
+  background: rgba(15, 23, 42, 0.07);
+  border-color: rgba(11, 111, 184, 0.35);
+}
+
+/* The generic .btn override above would flatten the amber; put it back. */
+:root[data-theme='light'] :is(.btn-primary, .card-btn-fill) {
+  background: linear-gradient(180deg, #ffc247, var(--color-signal));
+  border-color: rgba(194, 124, 0, 0.55);
+  box-shadow: 0 8px 22px -12px rgba(194, 124, 0, 0.7), 0 1px 0 0 rgba(255, 255, 255, 0.5) inset;
+}
+
+:root[data-theme='light'] :is(.btn-primary, .card-btn-fill):hover:not(:disabled) {
+  background: linear-gradient(180deg, #ffce68, #ffbb35);
+}
+
+:root[data-theme='light'] .btn-danger {
+  background: rgba(225, 29, 72, 0.08);
+  border-color: rgba(225, 29, 72, 0.3);
+}
+
+:root[data-theme='light'] :is(.field, .form-input, .input-box) {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.14);
+}
+
+:root[data-theme='light'] :is(.field, .form-input):focus {
+  background: #ffffff;
+  border-color: rgba(194, 124, 0, 0.6);
+  box-shadow: 0 0 0 3px rgba(255, 176, 32, 0.2);
+}
+
+:root[data-theme='light'] input[type='date'].field::-webkit-calendar-picker-indicator { filter: none; }
+
+:root[data-theme='light'] .chip-mist { background: rgba(15, 23, 42, 0.05); border-color: rgba(15, 23, 42, 0.12); }
+
+:root[data-theme='light'] .modal::backdrop { background: rgba(15, 23, 42, 0.35); }
+
 }
 
 /* --------------------------------------------------------------------------
@@ -595,6 +752,11 @@ input[type='date'].field::-webkit-calendar-picker-indicator {
    -------------------------------------------------------------------------- */
 
 .hairline { border-color: rgba(148, 178, 255, 0.1); }
+:root[data-theme='light'] .hairline { border-color: rgba(15, 23, 42, 0.08); }
+:root[data-theme='light'] .skeleton {
+  background: linear-gradient(90deg, rgba(15, 23, 42, 0.04), rgba(15, 23, 42, 0.09), rgba(15, 23, 42, 0.04));
+  background-size: 200% 100%;
+}
 
 /* For strips that scroll sideways on small screens, where a visible bar under
    the content is more noise than signal. */

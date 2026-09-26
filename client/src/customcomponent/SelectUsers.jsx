@@ -65,7 +65,13 @@ const SelectUsers = ({ selectedUsers, setSelectedUsers }) => {
           {allUsers.length > 0 ? (
             allUsers.map((user) => (
               <div key={user._id} className="flex items-center gap-4 p-3 rounded-lg hover:bg-white/5 transition-colors">
-                <img src={user.profileImageUrl} alt={user.name} className="w-10 h-10 rounded-full object-cover bg-deck border border-white/10" />
+                {user.profileImageUrl ? (
+                  <img src={user.profileImageUrl} alt="" className="w-10 h-10 rounded-full object-cover bg-deck border border-white/10" />
+                ) : (
+                  <div className="w-10 h-10 shrink-0 rounded-full grid place-items-center bg-deck border border-white/10 font-display text-ice">
+                    {user.name?.[0]?.toUpperCase()}
+                  </div>
+                )}
                 <div className="flex-1">
                   <p className="text-sm font-medium text-beam">{user.name}</p>
                   <p className="text-xs text-dusk">{user.email}</p>
@@ -74,6 +80,7 @@ const SelectUsers = ({ selectedUsers, setSelectedUsers }) => {
                   type="checkbox"
                   checked={tempSelectedUsers.includes(user._id)}
                   onChange={() => toggleUserSelection(user._id)}
+                  aria-label={`Assign ${user.name}`}
                   className="w-4 h-4 rounded-sm shrink-0"
                 />
               </div>

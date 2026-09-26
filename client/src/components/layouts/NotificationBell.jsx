@@ -56,7 +56,7 @@ const NotificationBell = () => {
                 <LuBell className="text-xl" />
 
                 {unreadCount > 0 && (
-                    <span className="absolute top-1 right-1 min-w-[17px] h-[17px] px-1 grid place-items-center text-[10px] font-semibold text-void bg-signal rounded-full num shadow-[0_0_10px_1px_rgba(255,176,32,0.6)]">
+                    <span className="absolute top-1 right-1 min-w-[17px] h-[17px] px-1 grid place-items-center text-[10px] font-semibold text-ink bg-signal rounded-full num shadow-[0_0_10px_1px_rgba(255,176,32,0.6)]">
                         {unreadCount > 99 ? '99+' : unreadCount}
                     </span>
                 )}
@@ -71,7 +71,7 @@ const NotificationBell = () => {
             </button>
 
             {open && (
-                <div className="enter-drop absolute right-0 mt-2 w-[min(92vw,380px)] panel panel-raised panel-blur z-50 overflow-hidden">
+                <div className="enter-drop absolute right-0 mt-2 w-[min(92vw,380px)] panel panel-raised panel-blur bg-hull z-50 overflow-hidden">
                     <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-white/8">
                         <h4 className="font-display text-sm text-beam">Notifications</h4>
                         {unreadCount > 0 && (
