@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useContext } from 'react';
 import DashboardLayout from "../../components/layouts/DashboardLayout";
 import { API_PATHS } from '../../utils/apiPaths';
-import { PRIORITY_DATA, CATEGORY_DATA } from '../../utils/data';
+import { PRIORITY_DATA, CATEGORY_DATA, RECURRENCE_DATA } from '../../utils/data';
 import axiosInstance from '../../utils/axiosInstance';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { LuTrash2 } from 'react-icons/lu';
 import moment from 'moment';
 import toast from 'react-hot-toast';
@@ -31,6 +31,8 @@ const CreateTask = () => {
     assignedTo: [],
     todoChecklist: [],
     attachments: [],
+    requiresReview: true,
+    recurrence: "none",
   });
 
   const [currentTask, setCurrentTask] = useState(null);
@@ -52,6 +54,8 @@ const CreateTask = () => {
       assignedTo: [],
       todoChecklist: [],
       attachments: [],
+      requiresReview: true,
+      recurrence: "none",
     });
   };
 
@@ -149,6 +153,8 @@ const CreateTask = () => {
           assignedTo: response.data?.assignedTo?.map((item) => item?._id) || [],
           todoChecklist: response.data?.todoChecklist?.map((item) => item.text) || [],
           attachments: response.data?.attachments || [],
+          requiresReview: Boolean(response.data.requiresReview),
+          recurrence: response.data.recurrence || "none",
         });
       }
     } catch (error) {
@@ -184,6 +190,12 @@ const CreateTask = () => {
     <DashboardLayout activeMenu="Create Task">
       <div className="py-6 max-w-5xl mx-auto">
         <div className="panel p-6 md:p-8">
+          {currentTask?.status === "In Review" && (
+            <Link to={`/user/task-details/${taskId}`} className="block text-sm text-signal mb-4">
+              This task is waiting for review. Open it to approve or send it back.
+            </Link>
+          )}
+
           <div className="flex items-center justify-between gap-4 pb-5 mb-7 border-b border-white/8">
             <h2 className="font-display text-2xl text-beam">
               {taskId ? "Update task" : "Create a task"}
@@ -262,6 +274,25 @@ const CreateTask = () => {
                   onChange={({ target }) => handleValueChange("dueDate", target.value)}
                 />
               </div>
+
+              <div>
+                <span className="field-label">Repeat</span>
+                <SelectDropdown
+                  options={RECURRENCE_DATA}
+                  value={taskData.recurrence}
+                  onChange={(value) => handleValueChange("recurrence", value)}
+                  placeholder="Does not repeat"
+                />
+              </div>
+
+              <label className="flex items-center gap-2 text-sm text-beam cursor-pointer self-end pb-2">
+                <input
+                  type="checkbox"
+                  checked={taskData.requiresReview}
+                  onChange={({ target }) => handleValueChange("requiresReview", target.checked)}
+                />
+                Needs approval before it counts as done
+              </label>
 
               <div>
                 <span className="field-label">Assigned to</span>

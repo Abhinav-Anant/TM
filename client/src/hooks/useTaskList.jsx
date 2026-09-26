@@ -27,6 +27,7 @@ const useTaskList = () => {
                 { label: "All", count: summary.all || 0 },
                 { label: "Pending", count: summary.pendingTasks || 0 },
                 { label: "In Progress", count: summary.inProgressTasks || 0 },
+                { label: "In Review", count: summary.inReviewTasks || 0 },
                 { label: "Completed", count: summary.completedTasks || 0 },
             ]);
         } catch (error) {

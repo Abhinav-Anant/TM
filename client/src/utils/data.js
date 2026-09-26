@@ -152,7 +152,15 @@ export const PRIORITY_DATA = [
 export const STATUS_DATA = [
   { label: "Pending", value: "Pending" },
   { label: "In Progress", value: "In Progress" },
+  { label: "In Review", value: "In Review" },
   { label: "Completed", value: "Completed" }
+];
+
+export const RECURRENCE_DATA = [
+  { label: "Does not repeat", value: "none" },
+  { label: "Daily", value: "daily" },
+  { label: "Weekly", value: "weekly" },
+  { label: "Monthly", value: "monthly" },
 ];
 
 // Starting points only - the category field is a free string, and the
@@ -200,6 +208,7 @@ export const categoryColor = (name = "") => {
  */
 export const statusChip = (status) => ({
   "In Progress": "chip-active",
+  "In Review": "chip-signal",
   Completed: "chip-done",
   Pending: "chip-pending",
 }[status] || "chip-mist");
@@ -213,6 +222,7 @@ export const priorityChip = (priority) => ({
 /** Bar and dot fills, for places a chip would be too heavy. */
 export const statusFill = (status) => ({
   "In Progress": "bg-active",
+  "In Review": "bg-signal",
   Completed: "bg-done",
   Pending: "bg-pending",
 }[status] || "bg-mist");
@@ -220,6 +230,7 @@ export const statusFill = (status) => ({
 /** Matching text colour, for anything that glows in its own hue (currentColor). */
 export const statusText = (status) => ({
   "In Progress": "text-active",
+  "In Review": "text-signal",
   Completed: "text-done",
   Pending: "text-pending",
 }[status] || "text-mist");

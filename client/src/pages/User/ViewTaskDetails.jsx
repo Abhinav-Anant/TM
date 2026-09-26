@@ -8,11 +8,29 @@ import AvatarGroup from '../../components/layouts/AvatarGroup';
 import Progress from '../../components/layouts/Progress';
 import TaskComments from '../../components/TaskComments';
 import { categoryColor, statusChip, priorityChip } from '../../utils/data';
-import { LuSquareArrowUpRight, LuTriangleAlert, LuCheck } from 'react-icons/lu';
+import { LuSquareArrowUpRight, LuTriangleAlert, LuCheck, LuRepeat } from 'react-icons/lu';
+import toast from 'react-hot-toast';
 
 const ViewTaskDetails = () => {
   const { id } = useParams();
   const [task, setTask] = useState(null);
+  const [reviewNote, setReviewNote] = useState("");
+  const [reviewing, setReviewing] = useState(false);
+
+  // The server re-checks permission; canReview only decides whether to show the buttons.
+  const review = async (action) => {
+    setReviewing(true);
+    try {
+      const { data } = await axiosInstance.put(API_PATHS.TASKS.REVIEW_TASK(id), { action, note: reviewNote });
+      setTask({ ...data.task, canReview: task.canReview });
+      setReviewNote("");
+      toast.success(action === "approve" ? "Approved" : "Sent back");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "That did not go through.");
+    } finally {
+      setReviewing(false);
+    }
+  };
 
   const getTaskDetailsById = async () => {
     try {
@@ -35,7 +53,7 @@ const ViewTaskDetails = () => {
         { todoChecklist }
       );
       if (response.status === 200) {
-        setTask(response.data?.task || task);
+        setTask((prev) => ({ ...(response.data?.task || prev), canReview: prev.canReview }));
       }
     } catch (error) {
       console.error("Error updating checklist", error);
@@ -72,6 +90,9 @@ const ViewTaskDetails = () => {
                   {task.category || 'General'}
                 </span>
                 <span className={`chip ${statusChip(task.status)}`}>{task.status}</span>
+                {task.recurrence && task.recurrence !== "none" && (
+                  <span className="chip chip-mist flex items-center gap-1"><LuRepeat /> Repeats {task.recurrence}</span>
+                )}
               </div>
             </div>
 
@@ -125,6 +146,26 @@ const ViewTaskDetails = () => {
 
         {/* Everything you check without reading: who, when, how far along. */}
         <aside className="panel p-6 lg:sticky lg:top-[89px] space-y-6">
+          {task.status === "In Review" && task.canReview && (
+            <div className="space-y-3">
+              <p className="field-label">Waiting for your review</p>
+              <textarea
+                className="field"
+                rows={3}
+                placeholder="Note for the assignee (sent with Send back)"
+                value={reviewNote}
+                onChange={({ target }) => setReviewNote(target.value)}
+              />
+              <div className="flex gap-2">
+                <button className="btn btn-primary" disabled={reviewing} onClick={() => review("approve")}>Approve</button>
+                <button className="btn" disabled={reviewing} onClick={() => review("reject")}>Send back</button>
+              </div>
+            </div>
+          )}
+          {task.status === "In Review" && !task.canReview && (
+            <p className="text-sm text-signal">Submitted. Waiting for approval.</p>
+          )}
+
           <div>
             <p className="field-label mb-2">Progress</p>
             <div className="flex items-baseline justify-between mb-2">

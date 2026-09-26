@@ -36,6 +36,7 @@ const UserDashboard = () => {
     setPieChartData([
       { status: 'Pending', count: taskDistribution.Pending || 0 },
       { status: 'In Progress', count: taskDistribution.InProgress || 0 },
+      { status: 'In Review', count: taskDistribution.InReview || 0 },
       { status: 'Completed', count: taskDistribution.Completed || 0 },
     ]);
 

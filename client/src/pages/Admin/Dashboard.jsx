@@ -44,6 +44,7 @@ const Dashboard = () => {
   const pieData = [
     { status: 'Pending', count: d.pendingTasksCount || 0 },
     { status: 'In Progress', count: d.inProgressTasksCount || 0 },
+    { status: 'In Review', count: d.inReviewTasksCount || 0 },
     { status: 'Completed', count: d.completedTasksCount || 0 },
   ];
 

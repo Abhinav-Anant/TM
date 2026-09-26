@@ -28,6 +28,7 @@ export const API_PATHS = {
         UPDATE_TASK: (taskId) => `/api/tasks/${taskId}`, // Update task details
         DELETE_TASK: (taskId) => `/api/tasks/${taskId}`, // Delete a task (Admin only)
         UPDATE_TASK_STATUS: (taskId) => `/api/tasks/${taskId}/status`, // Update task status
+        REVIEW_TASK: (taskId) => `/api/tasks/${taskId}/review`, // { action: approve|reject, note }
         UPDATE_TODO_CHECKLIST: (taskId) => `/api/tasks/${taskId}/todo`, // Update todo checklist
         UPLOAD_ATTACHMENTS: "/api/tasks/upload", // Upload task files (multipart)
         ADD_COMMENT: (taskId) => `/api/tasks/${taskId}/comments`, // Post a comment
