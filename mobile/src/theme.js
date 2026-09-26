@@ -11,6 +11,7 @@ export const colors = {
 export const STATUS_COLOR = {
     Pending: '#8D51FF',
     'In Progress': '#00B8DB',
+    'In Review': '#FFB020',
     Completed: '#65A30D',
 };
 

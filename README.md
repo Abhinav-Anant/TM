@@ -213,6 +213,9 @@ Task-Management/
 - [x] **Task Categories:** Organize tasks into different categories
 - [x] **Progress Tracking:** Visual progress indicators and analytics
 - [x] **Mobile App:** React Native mobile application
+- [x] **Review step:** Tasks can require sign-off - finished work waits In Review until the creator or department head approves or sends it back
+- [x] **Recurring tasks:** Daily / weekly / monthly; the next copy is created when the current one is completed
+- [x] **Overdue escalation:** Department heads and the creator are alerted once when a task is `ESCALATE_AFTER_DAYS` (default 2) overdue
 
 ### How each one works
 
@@ -231,6 +234,9 @@ Task-Management/
 | **Categories** | `category` field on Task with a datalist of suggestions in the create form; `GET /api/tasks/categories` returns the ones actually in use. |
 | **Progress tracking** | `GET /api/tasks/analytics` → completion rate, average progress, overdue count, created-vs-completed trend, per-category progress, next deadlines. Rendered at `/analytics` with the charts already in the project. A `completedAt` timestamp now backs the trend. |
 | **Mobile app** | `mobile/` — Expo / React Native. See [mobile/README.md](mobile/README.md). |
+| **Review step** | `Task.requiresReview` (web form defaults it on). A non-reviewer finishing the task (status or checklist) moves it to `In Review` and alerts the creator + assignees' heads. `PUT /api/tasks/:id/review {action: approve\|reject, note}` - approve completes it, reject returns it to In Progress with the note as a comment. Reviewers (admin, creator, assignee's head) complete directly. |
+| **Recurring tasks** | `Task.recurrence` = none/daily/weekly/monthly. Every path into Completed calls `spawnNext`, which claims `Task.nextTask` atomically and creates one fresh copy (unticked checklist, due date from `utils/recurrence.js`, skipping past dates, month-end clamped). |
+| **Overdue escalation** | `scanEscalations` runs after the deadline scan: tasks still open `ESCALATE_AFTER_DAYS` past due alert the assignees' department heads and the creator, once per person per task. |
 
 ### Environment variables
 
