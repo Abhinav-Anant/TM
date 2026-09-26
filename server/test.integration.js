@@ -700,6 +700,92 @@ const waitForServer = async () => {
         assert.strictEqual(headAlerts.length, 1, "the department head is copied on a completion, exactly once");
         pass("Completion escalation", "department head notified on a completion they were neither assigned nor created");
 
+        // ---------- REVIEW STEP + RECURRING TASKS ----------
+        const SM = salesMember.token;
+        const gst = (await call("POST", "/api/tasks", {
+            token: A,
+            body: {
+                title: "File the GST return", dueDate: day(6), assignedTo: [salesMember._id],
+                requiresReview: true, recurrence: "monthly",
+                todoChecklist: [{ text: "collect invoices", completed: false }],
+            },
+        })).body.task;
+        assert.strictEqual(gst.requiresReview, true);
+        assert.strictEqual(gst.recurrence, "monthly");
+        assert.strictEqual(
+            (await call("POST", "/api/tasks", { token: A, body: { title: "bad", dueDate: day(1), assignedTo: [], recurrence: "hourly" } })).status,
+            400, "unknown recurrence is rejected");
+
+        // The assignee finishing sends it for review, not to Completed.
+        let r = await call("PUT", `/api/tasks/${gst._id}/status`, { token: SM, body: { status: "Completed" } });
+        assert.strictEqual(r.status, 200);
+        assert.strictEqual(r.body.updatedTask.status, "In Review");
+        assert.strictEqual(r.body.updatedTask.completedAt, null);
+        assert.strictEqual(
+            (await call("PUT", `/api/tasks/${gst._id}/status`, { token: SM, body: { status: "In Review" } })).status,
+            400, "In Review is set by the server, not requested");
+
+        let reviewAlerts = [];
+        for (let i = 0; i < 10; i += 1) {
+            await sleep(300);
+            reviewAlerts = (await call("GET", "/api/notifications?limit=100", { token: H }))
+                .body.notifications.filter((n) => n.type === "review" && /File the GST return/.test(n.title));
+            if (reviewAlerts.length) break;
+        }
+        assert.strictEqual(reviewAlerts.length, 1, "the assignee's head is asked to review");
+
+        assert.strictEqual((await call("GET", `/api/tasks/${gst._id}`, { token: H })).body.canReview, true);
+        assert.strictEqual((await call("GET", `/api/tasks/${gst._id}`, { token: SM })).body.canReview, false);
+        assert.strictEqual(
+            (await call("PUT", `/api/tasks/${gst._id}/review`, { token: SM, body: { action: "approve" } })).status,
+            403, "nobody approves their own work");
+        assert.strictEqual(
+            (await call("PUT", `/api/tasks/${gst._id}/review`, { token: H, body: { action: "maybe" } })).status,
+            400, "unknown review action");
+
+        // Send back with a note: back to In Progress, note lands as a comment.
+        r = await call("PUT", `/api/tasks/${gst._id}/review`, { token: H, body: { action: "reject", note: "Attach the challan" } });
+        assert.strictEqual(r.status, 200);
+        assert.strictEqual(r.body.task.status, "In Progress");
+        assert.strictEqual(r.body.task.comments.at(-1).text, "Attach the challan");
+        assert.strictEqual(
+            (await call("PUT", `/api/tasks/${gst._id}/review`, { token: H, body: { action: "approve" } })).status,
+            400, "only a task in review can be approved");
+
+        // Resubmitting through the checklist also stops at In Review.
+        r = await call("PUT", `/api/tasks/${gst._id}/todo`, {
+            token: SM, body: { todoChecklist: [{ text: "collect invoices", completed: true }] },
+        });
+        assert.strictEqual(r.body.task.status, "In Review");
+
+        // Approve: Completed, and exactly one next copy.
+        r = await call("PUT", `/api/tasks/${gst._id}/review`, { token: A, body: { action: "approve" } });
+        assert.strictEqual(r.status, 200);
+        assert.strictEqual(r.body.task.status, "Completed");
+        assert.ok(r.body.task.completedAt, "approval stamps completedAt");
+        const nextId = r.body.task.nextTask;
+        assert.ok(nextId, "a recurring task spawns its next copy on completion");
+
+        const next = (await call("GET", `/api/tasks/${nextId}`, { token: A })).body;
+        assert.strictEqual(next.title, "File the GST return");
+        assert.strictEqual(next.status, "Pending");
+        assert.strictEqual(next.recurrence, "monthly");
+        assert.strictEqual(next.requiresReview, true);
+        assert.ok(next.todoChecklist.length === 1 && next.todoChecklist.every((t) => !t.completed), "checklist starts unticked");
+        assert.ok(new Date(next.dueDate) > new Date(gst.dueDate), "next copy is due later");
+
+        // Reopen and complete again: a reviewer completes directly, and no second copy appears.
+        await call("PUT", `/api/tasks/${gst._id}/status`, { token: A, body: { status: "In Progress" } });
+        r = await call("PUT", `/api/tasks/${gst._id}/status`, { token: A, body: { status: "Completed" } });
+        assert.strictEqual(r.body.updatedTask.status, "Completed", "a reviewer skips their own review");
+        assert.strictEqual(String(r.body.updatedTask.nextTask), String(nextId));
+        const copies = (await call("GET", "/api/tasks?search=File%20the%20GST%20return", { token: A })).body.tasks;
+        assert.strictEqual(copies.length, 2, "re-completing never spawns a second copy");
+
+        const summary = (await call("GET", "/api/tasks", { token: A })).body.statusSummary;
+        assert.strictEqual(typeof summary.inReviewTasks, "number", "In Review has its own tab count");
+        pass("Review step & recurrence", "submit->review->send back->resubmit->approve; one next copy; reviewer completes directly");
+
         // And so is the assignable-people list.
         const headUsers = (await call("GET", "/api/users", { token: H })).body.map((u) => u.email).sort();
         assert.deepStrictEqual(headUsers, ["head@example.test", "sam@example.test"], "head sees only their department");

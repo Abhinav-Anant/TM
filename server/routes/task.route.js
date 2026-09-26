@@ -6,7 +6,7 @@ const {
     getDashboardData, getUserDashboardData,
     getTasks, getTaskById, getCategories, getAnalytics,
     createTask, updateTask,
-    updateTaskCheckList, updateTaskStatus,
+    updateTaskCheckList, updateTaskStatus, reviewTask,
     addComment, deleteComment, uploadAttachments,
     deleteTask,
 } = require('../controller/task.controller.js');
@@ -25,6 +25,7 @@ router.post('/', protect, allowRoles("admin", "head"), createTask);
 router.put('/:id', protect, allowRoles("admin", "head"), updateTask);
 router.put('/:id/todo', protect, updateTaskCheckList);
 router.put('/:id/status', protect, updateTaskStatus);
+router.put('/:id/review', protect, reviewTask);
 router.delete('/:id', protect, adminOnly, deleteTask);
 
 router.post('/:id/comments', protect, addComment);

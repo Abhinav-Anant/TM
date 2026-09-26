@@ -116,6 +116,14 @@ assert.deepStrictEqual(buildSort({}), { createdAt: -1 });
     assert.strictEqual(task.progress, 0);
     assert.strictEqual(task.status, "Pending");
 }
+{
+    // A task that needs sign-off stops at In Review, and is not stamped completed.
+    const task = { todoChecklist: [{ completed: true }] };
+    syncProgress(task, { needsReview: true });
+    assert.strictEqual(task.status, "In Review");
+    assert.strictEqual(task.progress, 100);
+    assert.strictEqual(task.completedAt, null);
+}
 
 // --- recurrence -----------------------------------------------------------
 {
