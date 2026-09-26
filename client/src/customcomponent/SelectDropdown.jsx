@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { LuChevronDown, LuCheck } from 'react-icons/lu';
 
-const SelectDropdown = ({ options = [], value, onChange, placeholder }) => {
+const SelectDropdown = ({ options = [], value, onChange, placeholder, labelledBy }) => {
     const [isOpen, setIsOpen] = useState(false);
     const wrapRef = useRef(null);
 
@@ -29,6 +29,7 @@ const SelectDropdown = ({ options = [], value, onChange, placeholder }) => {
                 type="button"
                 aria-haspopup="listbox"
                 aria-expanded={isOpen}
+                aria-labelledby={labelledBy}
                 className="field flex justify-between items-center gap-2 text-left cursor-pointer"
                 onClick={() => setIsOpen((v) => !v)}
             >
