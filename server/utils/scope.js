@@ -72,6 +72,36 @@ const canAssignTo = async (user, userIds) => {
     return userIds.every((id) => memberIds.includes(idStr(id)));
 };
 
+/** Everyone who heads a department that any of `userIds` belongs to. */
+const departmentHeadsOf = async (userIds) => {
+    const users = await User.find({ _id: { $in: (userIds || []).map(idStr) } }).select('memberships').lean();
+    const departments = [...new Set(
+        users.flatMap((user) => (user.memberships || []).map((m) => idStr(m.department)))
+    )];
+    if (!departments.length) return [];
+
+    // `head: true` matters: a head who is merely a rep in a department does not oversee it.
+    const heads = await User.find({
+        memberships: { $elemMatch: { department: { $in: departments }, head: true } },
+    }).select('_id').lean();
+    return heads.map((head) => head._id);
+};
+
+/**
+ * May `user` sign off a task that needs review? An admin, the task's creator,
+ * or the head of an assignee's department - but never someone approving work
+ * only they were assigned.
+ */
+const canReview = async (user, task) => {
+    if (user.role === "admin") return true;
+    const me = idStr(user._id);
+    if ((task.createdBy || []).map(idStr).includes(me)) return true;
+
+    const others = (task.assignedTo || []).map(idStr).filter((id) => id !== me);
+    if (!others.length) return false;
+    return (await departmentHeadsOf(others)).map(idStr).includes(me);
+};
+
 /**
  * Which screens this user may reach. The union across their departments -
  * being in Sales AND Marketing grants both sets.
@@ -92,4 +122,5 @@ const modulesFor = async (user) => {
 module.exports = {
     MODULES, departmentMemberIds, headedDepartmentIds,
     scopeFor, canAccessTask, canAssignTo, modulesFor, idStr,
+    departmentHeadsOf, canReview,
 };

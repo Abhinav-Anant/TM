@@ -1,7 +1,7 @@
 const Task = require('../model/task.model.js');
 const User = require('../model/user.model.js');
 const { notify } = require('../utils/notify.js');
-const { scopeFor, canAccessTask, canAssignTo, departmentMemberIds, headedDepartmentIds } = require('../utils/scope.js');
+const { scopeFor, canAccessTask, canAssignTo, departmentMemberIds, headedDepartmentIds, departmentHeadsOf } = require('../utils/scope.js');
 
 const SORTABLE_FIELDS = ["dueDate", "createdAt", "updatedAt", "priority", "progress", "title"];
 const PRIORITY_ORDER = { High: 3, Medium: 2, Low: 1 };
@@ -74,20 +74,12 @@ const watchersOf = (task) => [...(task.assignedTo || []), ...(task.createdBy || 
  * notify() de-duplicates and drops the actor, so overlap with watchersOf is free.
  */
 const completionWatchers = async (task) => {
-    const assignees = await User.find({ _id: { $in: task.assignedTo || [] } }).select("memberships");
-    const departments = [...new Set(
-        assignees.flatMap((user) => (user.memberships || []).map((m) => String(m.department)))
-    )];
-    // `head: true` matters: without it a head would be copied on completions
-    // from a department they merely belong to as a rep.
-    const oversight = await User.find({
-        $or: [
-            { role: "admin" },
-            { memberships: { $elemMatch: { department: { $in: departments }, head: true } } },
-        ],
-    }).select("_id");
-
-    return [...watchersOf(task), ...oversight.map((user) => user._id)];
+    const admins = await User.find({ role: "admin" }).select("_id").lean();
+    return [
+        ...watchersOf(task),
+        ...admins.map((admin) => admin._id),
+        ...await departmentHeadsOf(task.assignedTo),
+    ];
 };
 
 const getDashboardData = async (req, res) => {

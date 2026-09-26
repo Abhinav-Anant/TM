@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { RECURRENCES } = require('../utils/recurrence.js');
 
 const todoSchema = new mongoose.Schema({
     text: { type: String, required: true }, 
@@ -22,10 +23,10 @@ const taskSchema = new mongoose.Schema({
         enum: ['Low', 'High', 'Medium'], 
         default: 'Medium' 
     },
-    status: { 
-        type: String, 
-        enum: ['Pending', 'In Progress', 'Completed'], 
-        default: 'Pending' 
+    status: {
+        type: String,
+        enum: ['Pending', 'In Progress', 'In Review', 'Completed'],
+        default: 'Pending'
     },
     dueDate: { type: Date, required: true }, 
     assignedTo: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }], 
@@ -33,8 +34,15 @@ const taskSchema = new mongoose.Schema({
     attachments: [{ type: String }], 
     todoChecklist: [todoSchema], 
     comments: [commentSchema],
-    progress: { type: Number, default: 0 }, 
+    progress: { type: Number, default: 0 },
     completedAt: { type: Date, default: null },
+    // Off by default so tasks created before the review step behave as before;
+    // the web form opts new tasks in.
+    requiresReview: { type: Boolean, default: false },
+    recurrence: { type: String, enum: RECURRENCES, default: 'none' },
+    // The copy spawned when this one completed. Doubles as the "already spawned"
+    // guard, so reopening and re-completing never creates a second copy.
+    nextTask: { type: mongoose.Schema.Types.ObjectId, ref: "Task", default: null },
     // Set when this task is a sales follow-up. The only link between the task
     // system and the pipeline - they share a database, so there is nothing to sync.
     lead: { type: mongoose.Schema.Types.ObjectId, ref: "Lead", default: null, index: true },
