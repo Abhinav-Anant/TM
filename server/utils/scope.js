@@ -119,8 +119,38 @@ const modulesFor = async (user) => {
     return [...new Set(departments.flatMap((department) => department.modules || []))];
 };
 
+/**
+ * Why `user` (a role plus, for an existing person, an _id) may not join
+ * `departmentId`, or null if they may. Shared by adding someone to a department
+ * and by creating a user straight into one, so the two can never disagree.
+ */
+const membershipError = async (user, departmentId, wantsHead) => {
+    if (user.role === "admin") {
+        return { status: 400, message: "Admins do not belong to a department" };
+    }
+    // Headship is a role-level privilege, so a member cannot be made head of
+    // anything - otherwise adding a rep to a department would hand them
+    // assign rights over the whole team.
+    if (wantsHead && user.role !== "head") {
+        return { status: 400, message: "Only a user with the head role can lead a department" };
+    }
+    // One head per department. Two people with assign rights over the same
+    // team is the thing this prevents; one person heading TWO departments is
+    // fine and deliberate.
+    if (wantsHead) {
+        const existingHead = await User.findOne({
+            memberships: { $elemMatch: { department: departmentId, head: true } },
+            ...(user._id && { _id: { $ne: user._id } }),
+        });
+        if (existingHead) {
+            return { status: 409, message: `${existingHead.name} is already head of this department` };
+        }
+    }
+    return null;
+};
+
 module.exports = {
     MODULES, departmentMemberIds, headedDepartmentIds,
     scopeFor, canAccessTask, canAssignTo, modulesFor, idStr,
-    departmentHeadsOf, canReview,
+    departmentHeadsOf, canReview, membershipError,
 };

@@ -904,6 +904,51 @@ const waitForServer = async () => {
         assert.strictEqual((await call("POST", "/api/users/import", { token: A })).status, 400, "import with no file");
         pass("CSV Member Import", `created ${importRes.body.created}, skipped ${importRes.body.skipped}, ${importRes.body.errors.length} row errors by line; admin-only`);
 
+        // --- admin creates a single user ---------------------------------
+        const ops = (await call("POST", "/api/departments", { token: A, body: { name: "Ops" } })).body.department;
+        const newUser = (body) => call("POST", "/api/users", { token: A, body: { password: "secret123", ...body } });
+
+        const madeMember = await newUser({ name: "Mia Member", email: " Mia.Member@E2E.test ", role: "member", phone: "98765 22222", department: ops._id });
+        assert.strictEqual(madeMember.status, 201, `create member status ${madeMember.status}`);
+        assert.strictEqual(madeMember.body.user.email, "mia.member@e2e.test", "email is stored trimmed and lowercased");
+        assert.strictEqual(madeMember.body.user.phone, "919876522222", "phone is normalised");
+        assert.strictEqual(madeMember.body.user.password, undefined, "the password hash never leaves the server");
+        assert.deepStrictEqual(madeMember.body.user.memberships.map((m) => [String(m.department), m.head]), [[ops._id, false]]);
+
+        const madeHead = await newUser({ name: "Otto Ops", email: "otto@e2e.test", role: "head", department: ops._id, head: true });
+        assert.strictEqual(madeHead.status, 201, `create head status ${madeHead.status}`);
+        assert.strictEqual(madeHead.body.user.memberships[0].head, true, "a head can be created as head of a department");
+        const madeAdmin = await newUser({ name: "Ada Admin", email: "ada@e2e.test", role: "admin" });
+        assert.strictEqual(madeAdmin.status, 201, `create admin status ${madeAdmin.status}`);
+
+        for (const [email, role] of [["mia.member@e2e.test", "member"], ["otto@e2e.test", "head"], ["ada@e2e.test", "admin"]]) {
+            const login = await call("POST", "/api/auth/login", { body: { email, password: "secret123" } });
+            assert.strictEqual(login.status, 200, `${email} can log in with the admin-set password`);
+            assert.strictEqual(login.body.role, role, `${email} has the role the admin picked`);
+        }
+
+        assert.strictEqual((await newUser({ name: "Dup", email: "MIA.member@e2e.test", role: "member" })).status, 409, "duplicate email, any case");
+        assert.strictEqual((await newUser({ name: "Bad", email: "bad@e2e.test", role: "owner" })).status, 400, "unknown role");
+        assert.strictEqual((await newUser({ name: "Short", email: "short@e2e.test", role: "member", password: "123" })).status, 400, "short password");
+        assert.strictEqual((await newUser({ name: "Phone", email: "phone@e2e.test", role: "member", phone: "12345" })).status, 400, "junk phone is rejected, not dropped");
+        assert.strictEqual((await newUser({ name: "Rep", email: "rep2@e2e.test", role: "member", department: ops._id, head: true })).status, 400, "a member cannot be made head");
+        assert.strictEqual((await newUser({ name: "Two", email: "two@e2e.test", role: "head", department: ops._id, head: true })).status, 409, "a department keeps one head");
+        assert.strictEqual((await newUser({ name: "Adm", email: "adm2@e2e.test", role: "admin", department: ops._id })).status, 400, "admins do not belong to a department");
+        assert.strictEqual((await newUser({ name: "Gone", email: "gone@e2e.test", role: "member", department: "64b000000000000000000000" })).status, 404, "unknown department");
+        assert.strictEqual((await call("POST", "/api/auth/login", { body: { email: "two@e2e.test", password: "secret123" } })).status, 401, "a rejected create leaves no account behind");
+        assert.strictEqual((await call("POST", "/api/users", { token: M, body: { name: "X", email: "x2@e2e.test", password: "secret123", role: "admin" } })).status, 403, "members cannot create users");
+        assert.strictEqual((await call("POST", "/api/users", { token: H, body: { name: "X", email: "x3@e2e.test", password: "secret123", role: "member" } })).status, 403, "heads cannot create users");
+
+        // The person then replaces the admin-set password - but only by proving they know it.
+        const miaToken = (await call("POST", "/api/auth/login", { body: { email: "mia.member@e2e.test", password: "secret123" } })).body.token;
+        assert.strictEqual((await call("PUT", "/api/auth/profile", { token: miaToken, body: { password: "brandnew99" } })).status, 400, "new password without the current one");
+        assert.strictEqual((await call("PUT", "/api/auth/profile", { token: miaToken, body: { password: "brandnew99", currentPassword: "wrong-one" } })).status, 400, "wrong current password is a form error, not a 401 (which logs the client out)");
+        assert.strictEqual((await call("PUT", "/api/auth/profile", { token: miaToken, body: { password: "123", currentPassword: "secret123" } })).status, 400, "new password too short");
+        assert.strictEqual((await call("PUT", "/api/auth/profile", { token: miaToken, body: { password: "brandnew99", currentPassword: "secret123" } })).status, 200, "password change");
+        assert.strictEqual((await call("POST", "/api/auth/login", { body: { email: "mia.member@e2e.test", password: "brandnew99" } })).status, 200, "the new password works");
+        assert.strictEqual((await call("POST", "/api/auth/login", { body: { email: "mia.member@e2e.test", password: "secret123" } })).status, 401, "the old one does not");
+        pass("Admin creates users", "member/head/admin created with department + headship; same rules as Departments; password change needs the current one");
+
         // ---------- SALES PIPELINE ----------
         // Fresh actors: this block must not depend on departments earlier
         // blocks create and delete.

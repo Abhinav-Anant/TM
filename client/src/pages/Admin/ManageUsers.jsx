@@ -4,15 +4,17 @@ import axiosInstance from '../../utils/axiosInstance';
 import { API_PATHS } from '../../utils/apiPaths';
 import { useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { LuFileSpreadsheet, LuUpload, LuDownload } from 'react-icons/lu';
+import { LuFileSpreadsheet, LuUpload, LuDownload, LuUserPlus } from 'react-icons/lu';
 import UserCard from '../../components/Cards/UserCard';
 import { useContext } from 'react';
 import { UserContext } from '../../context/userContext';
 import Modal from '../../components/layouts/Modal';
+import AddUserModal from '../../components/AddUserModal';
 
 const ManageUsers = () => {
   const { user } = useContext(UserContext);
   const [allUsers, setAllUsers] = useState([]);
+  const [openAdd, setOpenAdd] = useState(false);
   const [openImport, setOpenImport] = useState(false);
   const [csvFile, setCsvFile] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -109,7 +111,11 @@ const ManageUsers = () => {
 
           {/* Both the users export and the member import are org-wide, admin-only endpoints. */}
           {user?.role === 'admin' && (
-            <div className='flex items-center gap-2'>
+            <div className='flex flex-wrap items-center gap-2'>
+              <button className='btn btn-sm btn-primary' onClick={() => setOpenAdd(true)}>
+                <LuUserPlus /> Add user
+              </button>
+
               <button className='btn btn-sm' onClick={() => setOpenImport(true)}>
                 <LuUpload /> Import CSV
               </button>
@@ -132,12 +138,14 @@ const ManageUsers = () => {
             <p className='text-beam'>No one here yet.</p>
             <p className='text-sm text-mist mt-1'>
               {user?.role === 'admin'
-                ? 'Import a CSV to add your team in one go.'
+                ? 'Add people one at a time, or import a CSV to add your team in one go.'
                 : 'Members assigned to your department will appear here.'}
             </p>
           </div>
         )}
       </div>
+
+      <AddUserModal isOpen={openAdd} onClose={() => setOpenAdd(false)} onCreated={getAllUsers} />
 
       <Modal isOpen={openImport} onClose={closeImport} title="Import members from a CSV">
         <div className='space-y-5'>

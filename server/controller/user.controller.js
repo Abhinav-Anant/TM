@@ -2,9 +2,11 @@ const express = require("express");
 const Task = require('../model/task.model.js')
 const User = require('../model/user.model.js')
 const bcrypt = require("bcryptjs");
-const { departmentMemberIds, headedDepartmentIds } = require('../utils/scope.js');
+const mongoose = require('mongoose');
+const { departmentMemberIds, headedDepartmentIds, membershipError } = require('../utils/scope.js');
+const { normalizePhone } = require('../utils/phone.js');
 const Department = require('../model/department.model.js')
-const { parseMembersCsv } = require('../utils/csv.js')
+const { parseMembersCsv, MIN_PASSWORD_LENGTH, EMAIL_RE } = require('../utils/csv.js')
 
 // ponytail: hashing is serial and in-request (~100ms/row at cost 10). 200 rows fits a
 // long-lived request; move to a background job if imports ever get bigger than that.
@@ -154,6 +156,64 @@ const importMembers = async (req, res) => {
     }
 };
 
+const ROLES = ["admin", "head", "member"];
+
+// One person, any role, optionally straight into a department. Department rules
+// are the same ones adding someone on the Departments page enforces.
+const createUser = async (req, res) => {
+    try {
+        const { name, password, role, phone, department, head } = req.body;
+        const email = String(req.body.email || "").trim().toLowerCase();
+
+        if (!String(name || "").trim()) return res.status(400).json({ message: "Name is required" });
+        if (!EMAIL_RE.test(email)) return res.status(400).json({ message: "Enter a valid email address" });
+        if (typeof password !== "string" || password.length < MIN_PASSWORD_LENGTH) {
+            return res.status(400).json({ message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
+        }
+        if (!ROLES.includes(role)) return res.status(400).json({ message: "Role must be admin, head or member" });
+
+        // Rejected rather than dropped, so the admin is never left believing the
+        // person is reachable on WhatsApp.
+        const normalizedPhone = normalizePhone(phone);
+        if (phone && !normalizedPhone) {
+            return res.status(400).json({ message: "That does not look like a valid mobile number" });
+        }
+
+        const memberships = [];
+        if (department) {
+            if (!mongoose.isValidObjectId(department) || !(await Department.exists({ _id: department }))) {
+                return res.status(404).json({ message: "Department not found" });
+            }
+            const refused = await membershipError({ role }, department, Boolean(head));
+            if (refused) return res.status(refused.status).json({ message: refused.message });
+            memberships.push({ department, head: Boolean(head) });
+        }
+
+        // Emails from signup were never lowercased, so match case-insensitively.
+        const escaped = email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        if (await User.exists({ email: new RegExp(`^${escaped}$`, "i") })) {
+            return res.status(409).json({ message: "A user with that email already exists" });
+        }
+
+        const user = await User.create({
+            name: name.trim(),
+            email,
+            password: await bcrypt.hash(password, await bcrypt.genSalt(10)),
+            phone: normalizedPhone,
+            role,
+            memberships,
+        });
+
+        res.status(201).json({
+            message: `Created ${user.name} (${role})`,
+            user: await User.findById(user._id).select("-password"),
+        });
+    } catch (error) {
+        if (error.code === 11000) return res.status(409).json({ message: "A user with that email already exists" });
+        res.status(500).json({ message: "Server error", error: error.message });
+    }
+};
+
 // const deleteUser = async (req, res) => {
 //     try {
 
@@ -168,4 +228,4 @@ const importMembers = async (req, res) => {
 
 
 
-module.exports = { getUser, getUserById, importMembers }
+module.exports = { getUser, getUserById, importMembers, createUser }

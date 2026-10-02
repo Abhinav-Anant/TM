@@ -1,6 +1,6 @@
 const Department = require('../model/department.model.js');
 const User = require('../model/user.model.js');
-const { headedDepartmentIds, MODULES } = require('../utils/scope.js');
+const { headedDepartmentIds, MODULES, membershipError } = require('../utils/scope.js');
 
 // `memberships` is needed so the UI can say who heads THIS department, as
 // distinct from whoever merely holds the head role.
@@ -138,36 +138,14 @@ const addDepartmentMember = async (req, res) => {
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
-        if (user.role === "admin") {
-            return res.status(400).json({ message: "Admins do not belong to a department" });
-        }
-
         const wantsHead = Boolean(req.body.head);
-
-        // Headship is a role-level privilege, so a member cannot be made head of
-        // anything - otherwise adding a rep to a department would hand them
-        // assign rights over the whole team.
-        if (wantsHead && user.role !== "head") {
-            return res.status(400).json({ message: "Only a user with the head role can lead a department" });
+        const refused = await membershipError(user, department._id, wantsHead);
+        if (refused) {
+            return res.status(refused.status).json({ message: refused.message });
         }
 
         if (user.memberships.some((m) => String(m.department) === String(department._id))) {
             return res.status(409).json({ message: `${user.name} is already in this department` });
-        }
-
-        // One head per department. Two people with assign rights over the same
-        // team is the thing this prevents; one person heading TWO departments is
-        // fine and deliberate.
-        if (wantsHead) {
-            const existingHead = await User.findOne({
-                memberships: { $elemMatch: { department: department._id, head: true } },
-                _id: { $ne: user._id },
-            });
-            if (existingHead) {
-                return res.status(409).json({
-                    message: `${existingHead.name} is already head of this department`,
-                });
-            }
         }
 
         user.memberships.push({ department: department._id, head: wantsHead });

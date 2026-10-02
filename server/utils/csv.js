@@ -98,4 +98,4 @@ const parseMembersCsv = (text) => {
     return { rows, errors };
 };
 
-module.exports = { parseCsv, parseMembersCsv, MIN_PASSWORD_LENGTH };
+module.exports = { parseCsv, parseMembersCsv, MIN_PASSWORD_LENGTH, EMAIL_RE };

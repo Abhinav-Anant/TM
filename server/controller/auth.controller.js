@@ -4,6 +4,7 @@ const jwt = require("jsonwebtoken");
 const User = require("../model/user.model.js");
 const { normalizePhone } = require("../utils/phone.js");
 const { modulesFor } = require("../utils/scope.js");
+const { MIN_PASSWORD_LENGTH } = require("../utils/csv.js");
 
 // Generate JWT Token
 const generateToken = (userId) => {
@@ -125,7 +126,7 @@ const updateUserProfile = async (req, res) => {
             return res.status(404).json({ message: "User not found" });
         }
 
-        const { name, email, phone, profileImageUrl, password } = req.body;
+        const { name, email, phone, profileImageUrl, password, currentPassword } = req.body;
 
         if (name) user.name = name;
         if (email) user.email = email;
@@ -142,6 +143,18 @@ const updateUserProfile = async (req, res) => {
             user.phone = normalized;
         }
         if (password) {
+            // Proving the current password stops a stolen session token from
+            // locking the real owner out of their account.
+            if (!currentPassword) {
+                return res.status(400).json({ message: "Enter your current password to set a new one" });
+            }
+            if (!(await bcrypt.compare(currentPassword, user.password))) {
+                // 400, not 401: the client treats any 401 as an expired session and logs out.
+                return res.status(400).json({ message: "Current password is incorrect" });
+            }
+            if (password.length < MIN_PASSWORD_LENGTH) {
+                return res.status(400).json({ message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
+            }
             const salt = await bcrypt.genSalt(10);
             user.password = await bcrypt.hash(password, salt);
         }

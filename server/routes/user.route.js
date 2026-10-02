@@ -1,7 +1,7 @@
 const express = require("express");
 const router=express.Router();
 const {protect,adminOnly,allowRoles}=require('../middleware/authMiddleware.js')
-const {getUser,getUserById,importMembers}=require('../controller/user.controller.js')
+const {getUser,getUserById,importMembers,createUser}=require('../controller/user.controller.js')
 const {csvUpload}=require('../middleware/uploadMiddleware.js')
 
 
@@ -10,6 +10,7 @@ const {csvUpload}=require('../middleware/uploadMiddleware.js')
 router.get('/',protect, allowRoles("admin","head"),getUser);
 // Creating accounts stays admin-only: a head importing a CSV could name any department.
 router.post('/import',protect,adminOnly,csvUpload.single('file'),importMembers);
+router.post('/',protect,adminOnly,createUser);
 router.get('/:id',protect,getUserById)
 
 /*  router.delete('/:id',protect,adminOnly,deleteUser);

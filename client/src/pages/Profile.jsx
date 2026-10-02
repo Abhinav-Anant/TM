@@ -1,10 +1,11 @@
 import React, { useContext, useEffect, useState } from 'react';
-import { LuSmartphone } from 'react-icons/lu';
+import { LuSmartphone, LuKeyRound } from 'react-icons/lu';
 import toast from 'react-hot-toast';
 import DashboardLayout from '../components/layouts/DashboardLayout';
 import { UserContext } from '../context/userContext';
 import axiosInstance from '../utils/axiosInstance';
 import { API_PATHS } from '../utils/apiPaths';
+import Input from '../customcomponent/Input';
 
 /**
  * Where a member puts the number their task alerts go to. Deliberately the only
@@ -16,6 +17,9 @@ const Profile = () => {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [saving, setSaving] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
 
   // The context starts null on a hard refresh and fills in once /profile
   // returns, so seed the form from it rather than from the first render.
@@ -39,6 +43,22 @@ const Profile = () => {
       toast.error(error?.response?.data?.message || 'Could not save your profile');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setChangingPassword(true);
+    try {
+      const response = await axiosInstance.put(API_PATHS.AUTH.UPDATE_PROFILE, { password: newPassword, currentPassword });
+      updatedUser({ ...user, ...response.data });
+      setCurrentPassword('');
+      setNewPassword('');
+      toast.success('Password changed');
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Could not change your password');
+    } finally {
+      setChangingPassword(false);
     }
   };
 
@@ -86,6 +106,30 @@ const Profile = () => {
             <button type="submit" className="btn btn-primary" disabled={saving}>
               <LuSmartphone />
               {saving ? 'Saving' : 'Save profile'}
+            </button>
+          </div>
+        </form>
+
+        <form className="panel p-6 mt-5" onSubmit={handleChangePassword}>
+          <h3 className="font-display text-lg text-beam">Change password</h3>
+          <p className="text-sm text-mist mt-1 mb-5">
+            Replace the password you were given. You need your current one to do it.
+          </p>
+          {/* Lets a password manager file the new password under the right account. */}
+          <input type="email" name="username" autoComplete="username" value={user?.email || ''} readOnly hidden />
+          <Input
+            label="Current password" type="password" name="current-password" autoComplete="current-password"
+            value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required
+          />
+          <Input
+            label="New password" type="password" name="new-password" autoComplete="new-password"
+            value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={6}
+            placeholder="At least 6 characters"
+          />
+          <div className="flex justify-end">
+            <button type="submit" className="btn btn-primary" disabled={changingPassword}>
+              <LuKeyRound />
+              {changingPassword ? 'Changing' : 'Change password'}
             </button>
           </div>
         </form>

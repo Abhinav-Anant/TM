@@ -1,7 +1,8 @@
 import React, { useId, useState } from 'react';
 import { LuEye, LuEyeOff } from 'react-icons/lu';
 
-const Input = ({ label, type, value, onChange, placeholder, error }) => {
+// Extra props (name, autoComplete, required, inputMode...) go straight to the <input>.
+const Input = ({ label, type, value, onChange, placeholder, error, ...rest }) => {
   const [showPassword, setShowPassword] = useState(false);
   const id = useId();
   const isPassword = type === 'password';
@@ -23,6 +24,7 @@ const Input = ({ label, type, value, onChange, placeholder, error }) => {
           value={value}
           onChange={onChange}
           aria-invalid={error ? true : undefined}
+          {...rest}
         />
 
         {isPassword && (
