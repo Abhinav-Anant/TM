@@ -1,9 +1,9 @@
 import React, { useContext } from 'react';
 import DashboardLayout from "../../components/layouts/DashboardLayout";
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import axiosInstance from '../../utils/axiosInstance';
 import { API_PATHS } from '../../utils/apiPaths';
-import { LuFileSpreadsheet, LuInbox, LuPlus } from 'react-icons/lu';
+import { LuFileSpreadsheet, LuInbox, LuPlus, LuX } from 'react-icons/lu';
 import TaskStatusTab from '../../components/layouts/TaskStatusTab';
 import TaskCard from '../../components/Cards/TaskCard';
 import TaskFilters from '../../components/TaskFilters';
@@ -14,6 +14,7 @@ import { UserContext } from '../../context/userContext';
 import { basePathFor } from '../../utils/roles';
 
 const ManageTasks = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { tasks, tabs, categories, tags, projects, status, setStatus, filters, setFilters, loading, page, setPage, pagination } = useTaskList();
   const { user } = useContext(UserContext);
   const navigate = useNavigate();
@@ -58,6 +59,18 @@ const ManageTasks = () => {
             </button>
           </div>
         </div>
+
+        {filters.assignee && (
+          <p className="chip chip-signal mt-4">
+            Showing tasks for {searchParams.get('name') || 'one person'}
+            <button
+              type="button" className="ml-2 cursor-pointer" aria-label="Show everyone's tasks"
+              onClick={() => { setFilters((prev) => ({ ...prev, assignee: '' })); setSearchParams({}); }}
+            >
+              <LuX />
+            </button>
+          </p>
+        )}
 
         <TaskFilters filters={filters} setFilters={setFilters} categories={categories} tags={tags} projects={projects} />
 

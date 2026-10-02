@@ -12,6 +12,7 @@ import UserDashboard from './pages/User/UserDashboard';
 import MyTasks from './pages/User/MyTasks';
 import ViewTaskDetails from './pages/User/ViewTaskDetails';
 import CalendarView from './pages/CalendarView';
+import MyWork from './pages/MyWork';
 import Projects from './pages/Projects/Projects';
 import ProjectDetail from './pages/Projects/ProjectDetail';
 import Leads from './pages/Sales/Leads';
@@ -65,6 +66,7 @@ const App = () => {
               <Route element={<PrivateRoute />}>
                 <Route path="/user/task-details/:id" element={<ViewTaskDetails />} />
                 <Route path="/calendar" element={<CalendarView />} />
+                <Route path="/my-work" element={<MyWork />} />
                 <Route path="/projects" element={<Projects />} />
                 <Route path="/projects/:id" element={<ProjectDetail />} />
                 <Route path="/analytics" element={<Analytics />} />

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import axiosInstance from '../utils/axiosInstance';
 import { API_PATHS } from '../utils/apiPaths';
+import { useSearchParams } from 'react-router-dom';
 import { EMPTY_FILTERS, toQueryParams } from '../components/TaskFilters';
 
 /** Shared task-list state (status tab + search/filter/sort) for the admin and member views. */
@@ -14,7 +15,9 @@ const useTaskList = () => {
     const [tags, setTags] = useState([]);
     const [projects, setProjects] = useState([]);
     const [status, setStatus] = useState("All");
-    const [filters, setFilters] = useState({ ...EMPTY_FILTERS });
+    // The manager dashboard links here with ?assignee=<id> to show one employee's tasks.
+    const [searchParams] = useSearchParams();
+    const [filters, setFilters] = useState({ ...EMPTY_FILTERS, assignee: searchParams.get("assignee") || "" });
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
     const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });

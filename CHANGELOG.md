@@ -54,3 +54,18 @@
   `?department=` filter, scoped like every task list.
 - UI: Projects list (search, status filter, pager, progress cards), project page (stats, members, tasks with pager, edit, delete),
   project/department pickers on the task form, project filter on task lists, project link on the task page, "Projects" in every menu.
+
+### Phase 4 — Productivity
+- **My Work** (`/my-work`, every role): tabs All / Today / Upcoming / Overdue / Completed, filters by project, priority and tag, and a
+  Quick Add bar (task, assignee, due date, priority). `GET /api/tasks?mine=true` narrows even an admin's wide scope to their own tasks;
+  new `open=true` and `assignee=` filters. "Today" uses the browser's day (`tzOffset`), and a task due today is *Due Today*, not overdue.
+- Members may now create tasks **for themselves only** (`POST /api/tasks`); assigning to anyone else is still admin/head.
+- **Employee dashboard**: Overdue / Due today / In progress / Upcoming / Done this week (`GET /api/tasks/my-dashboard`), each linking into My Work.
+  The old dashboard endpoint now uses aggregation instead of loading every task.
+- **Manager dashboard** (admin = company, head = department): Open / Overdue / Due today / Blocked / In review / Done this week plus a
+  per-employee Open/Overdue table; clicking a name opens that person's tasks (`GET /api/tasks/manager-dashboard`). "Blocked" here is the
+  Blocked status.
+- **Time tracking** (optional): estimate, actual time, start/stop timer. One running timer per person and per task, claimed atomically
+  (two clicks cannot both win); a forgotten timer logs at most 24h; time changes appear in the timeline.
+- **Reminders**: none / at due time / 1 hour before / 1 day before / custom, per task. Sent once, from any number of app instances
+  (claim by conditional update); changing the due date or reminder re-arms it. Recurring copies inherit the reminder.

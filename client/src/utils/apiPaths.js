@@ -24,6 +24,11 @@ export const API_PATHS = {
         GET_ANALYTICS: "/api/tasks/analytics", // Progress + completion analytics
         GET_CATEGORIES: "/api/tasks/categories", // Distinct categories in scope
         GET_TAGS: "/api/tasks/tags", // Distinct tags in scope
+        MY_DASHBOARD: "/api/tasks/my-dashboard", // Own counts: overdue, due today, in progress, upcoming, done this week
+        MANAGER_DASHBOARD: "/api/tasks/manager-dashboard", // Admin/head: totals + per-employee table
+        TIME: (taskId) => `/api/tasks/${taskId}/time`, // { estimatedMinutes, actualMinutes }
+        TIMER_START: (taskId) => `/api/tasks/${taskId}/timer/start`,
+        TIMER_STOP: (taskId) => `/api/tasks/${taskId}/timer/stop`,
         WATCH: (taskId) => `/api/tasks/${taskId}/watch`, // { watching }
         BLOCKED_BY: (taskId) => `/api/tasks/${taskId}/blocked-by`, // { blockedBy: [taskId] }
         SUBTASKS: (taskId) => `/api/tasks/${taskId}/subtasks`, // POST; PUT/DELETE add /:subId

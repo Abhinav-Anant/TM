@@ -15,6 +15,7 @@ import Modal from '../../components/layouts/Modal';
 import DeleteAlert from '../../customcomponent/DeleteAlert';
 import { UserContext } from '../../context/userContext';
 import { basePathFor } from '../../utils/roles';
+import { REMINDER_DATA, formatMinutes, parseDuration } from '../../utils/helper';
 
 const CreateTask = () => {
   const { user } = useContext(UserContext);
@@ -30,6 +31,9 @@ const CreateTask = () => {
     category: "General",
     project: projectId || "",
     department: "",
+    reminderType: "none",
+    reminderCustom: "",
+    estimateText: "",
     startDate: null,
     dueDate: null,
     tagsText: "",
@@ -67,6 +71,9 @@ const CreateTask = () => {
       category: "General",
       project: "",
       department: "",
+      reminderType: "none",
+      reminderCustom: "",
+      estimateText: "",
       startDate: null,
       dueDate: null,
       tagsText: "",
@@ -81,6 +88,9 @@ const CreateTask = () => {
   // "#website, billing" -> ["website", "billing"]; the server normalises further.
   const tagsOf = () => taskData.tagsText.split(/[,\s]+/).map((t) => t.trim()).filter(Boolean);
   const dateOf = (value) => (value ? new Date(value).toISOString() : null);
+  const reminderOf = () => (taskData.reminderType === "custom"
+    ? { type: "custom", customMinutes: parseDuration(taskData.reminderCustom) }
+    : { type: taskData.reminderType });
 
   const createTask = async () => {
     setLoading(true);
@@ -95,6 +105,8 @@ const CreateTask = () => {
         tags: tagsOf(),
         project: taskData.project || null,
         department: taskData.department || null,
+        reminder: reminderOf(),
+        estimatedMinutes: parseDuration(taskData.estimateText),
         startDate: dateOf(taskData.startDate),
         dueDate: dateOf(taskData.dueDate),
         todoChecklist: todolist,
@@ -128,10 +140,14 @@ const CreateTask = () => {
         tags: tagsOf(),
         project: taskData.project || null,
         department: taskData.department || null,
+        reminder: reminderOf(),
         startDate: dateOf(taskData.startDate),
         dueDate: dateOf(taskData.dueDate),
         todoChecklist: todolist,
       });
+      if (!Number.isNaN(parseDuration(taskData.estimateText))) {
+        await axiosInstance.put(API_PATHS.TASKS.TIME(taskId), { estimatedMinutes: parseDuration(taskData.estimateText) });
+      }
 
       toast.success("Changes saved");
     } catch (error) {
@@ -157,6 +173,18 @@ const CreateTask = () => {
       setError("A repeating task needs a due date.");
       return;
     }
+    if (taskData.reminderType !== "none" && !taskData.dueDate) {
+      setError("A reminder needs a due date.");
+      return;
+    }
+    if (taskData.reminderType === "custom" && !(parseDuration(taskData.reminderCustom) > 0)) {
+      setError("Enter how long before the due date to remind, like 2h or 30m.");
+      return;
+    }
+    if (Number.isNaN(parseDuration(taskData.estimateText))) {
+      setError("Estimated time looks like 4h, 1h 30m or 90m.");
+      return;
+    }
 
     taskId ? updateTask() : createTask();
   };
@@ -172,6 +200,9 @@ const CreateTask = () => {
           description: response.data.description,
           priority: response.data.priority,
           status: response.data.status,
+          reminderType: response.data.reminder?.type || "none",
+          reminderCustom: response.data.reminder?.type === "custom" ? formatMinutes(response.data.reminder.customMinutes) : "",
+          estimateText: response.data.estimatedMinutes ? formatMinutes(response.data.estimatedMinutes) : "",
           project: response.data.project?._id || "",
           department: response.data.department?._id || "",
           category: response.data.category || 'General',
@@ -370,6 +401,25 @@ const CreateTask = () => {
                   <option value="">No department</option>
                   {departments.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
                 </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+              <div>
+                <label className="field-label" htmlFor="task-reminder">Reminder</label>
+                <select id="task-reminder" className="field" value={taskData.reminderType} onChange={({ target }) => handleValueChange("reminderType", target.value)}>
+                  {REMINDER_DATA.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </select>
+              </div>
+              {taskData.reminderType === "custom" && (
+                <div>
+                  <label className="field-label" htmlFor="task-reminder-custom">Remind me before</label>
+                  <input id="task-reminder-custom" className="field" placeholder="e.g. 2h or 30m" value={taskData.reminderCustom} onChange={({ target }) => handleValueChange("reminderCustom", target.value)} />
+                </div>
+              )}
+              <div>
+                <label className="field-label" htmlFor="task-estimate">Estimated time</label>
+                <input id="task-estimate" className="field" placeholder="optional, e.g. 4h" value={taskData.estimateText} onChange={({ target }) => handleValueChange("estimateText", target.value)} />
               </div>
             </div>
 

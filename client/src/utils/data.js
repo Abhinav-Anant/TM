@@ -1,7 +1,7 @@
 import {
   LuLayoutDashboard, LuClipboardCheck, LuSquarePlus, LuLogOut, LuUsers,
   LuCalendarDays, LuChartColumnBig, LuBuilding2, LuSmartphone,
-  LuTrendingUp, LuContact, LuFolderKanban,
+  LuTrendingUp, LuContact, LuFolderKanban, LuListTodo,
 } from 'react-icons/lu';
 
 export const SIDE_MENU_DATA = [
@@ -28,6 +28,12 @@ export const SIDE_MENU_DATA = [
     label: "Projects",
     icon: LuFolderKanban,
     path: "/projects",
+  },
+  {
+    id: "03b",
+    label: "My Work",
+    icon: LuListTodo,
+    path: "/my-work",
   },
   {
     id: "04",
@@ -88,6 +94,7 @@ export const SIDE_MENU_HEAD_DATA = [
   { id: "02", label: "Manage Tasks", icon: LuClipboardCheck, path: "/head/tasks" },
   { id: "03", label: "Create Task", icon: LuSquarePlus, path: "/head/create-task" },
   { id: "03a", label: "Projects", icon: LuFolderKanban, path: "/projects" },
+  { id: "03b", label: "My Work", icon: LuListTodo, path: "/my-work" },
   { id: "04", label: "Calendar", icon: LuCalendarDays, path: "/calendar" },
   { id: "05", label: "Analytics", icon: LuChartColumnBig, path: "/analytics" },
   { id: "05a", label: "Sales", icon: LuTrendingUp, path: "/sales", module: "sales" },
@@ -109,6 +116,12 @@ export const SIDE_MENU_USER_DATA = [
     label: "My Tasks",
     icon: LuClipboardCheck,
     path: "/user/tasks",
+  },
+  {
+    id: "02b",
+    label: "My Work",
+    icon: LuListTodo,
+    path: "/my-work",
   },
   {
     id: "02a",

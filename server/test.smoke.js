@@ -11,6 +11,38 @@ const { normalizePhone } = require("./utils/phone.js");
 const { parseMembersCsv } = require("./utils/csv.js");
 const { nextDueDate, RECURRENCES } = require("./utils/recurrence.js");
 
+// --- "today" in the caller's timezone, and reminders ----------------------
+{
+    const { dayBounds, computeRemindAt, reminderError } = require("./utils/workTime.js");
+    const wed = new Date("2026-10-07T10:00:00Z"); // a Wednesday
+
+    const utc = dayBounds(0, wed);
+    assert.strictEqual(utc.start.toISOString(), "2026-10-07T00:00:00.000Z");
+    assert.strictEqual(utc.end.toISOString(), "2026-10-08T00:00:00.000Z");
+    assert.strictEqual(utc.weekStart.toISOString(), "2026-10-05T00:00:00.000Z", "weeks start on Monday");
+
+    // India is UTC+5:30, so getTimezoneOffset() is -330: 20:00Z is already the 8th there.
+    const ist = dayBounds(-330, new Date("2026-10-07T20:00:00Z"));
+    assert.strictEqual(ist.start.toISOString(), "2026-10-07T18:30:00.000Z", "midnight in IST");
+    assert.strictEqual(dayBounds(0, new Date("2026-10-11T23:59:00Z")).weekStart.toISOString(), "2026-10-05T00:00:00.000Z", "Sunday belongs to the week that began Monday");
+    assert.strictEqual(dayBounds(0, new Date("2026-10-12T00:00:00Z")).weekStart.toISOString(), "2026-10-12T00:00:00.000Z", "Monday starts a new week");
+    assert.strictEqual(dayBounds(NaN, wed).start.toISOString(), utc.start.toISOString(), "a junk offset falls back to UTC");
+
+    const due = "2026-10-10T09:00:00Z";
+    assert.strictEqual(computeRemindAt(due, { type: "none" }), null);
+    assert.strictEqual(computeRemindAt(null, { type: "1h" }), null, "no due date, no reminder");
+    assert.strictEqual(computeRemindAt(due, { type: "at_due" }).toISOString(), "2026-10-10T09:00:00.000Z");
+    assert.strictEqual(computeRemindAt(due, { type: "1h" }).toISOString(), "2026-10-10T08:00:00.000Z");
+    assert.strictEqual(computeRemindAt(due, { type: "1d" }).toISOString(), "2026-10-09T09:00:00.000Z");
+    assert.strictEqual(computeRemindAt(due, { type: "custom", customMinutes: 90 }).toISOString(), "2026-10-10T07:30:00.000Z");
+    assert.ok(reminderError({ type: "weekly" }), "unknown type");
+    assert.ok(reminderError({ type: "custom", customMinutes: 0 }), "custom needs minutes");
+    assert.ok(reminderError({ type: "custom", customMinutes: 1.5 }), "whole minutes only");
+    assert.strictEqual(reminderError({ type: "custom", customMinutes: 15 }), null);
+    assert.strictEqual(reminderError({ type: "none" }), null);
+}
+
+
 // buildFilters now takes an already-resolved scope (see server/utils/scope.js)
 // rather than a user, which keeps it pure and synchronous.
 const admin = {};

@@ -28,6 +28,7 @@ const UserDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
   const [pieChartData, setPieChartData] = useState([]);
   const [barChartData, setBarChartData] = useState([]);
+  const [mine, setMine] = useState(null);
 
   const prepareChartData = (charts = {}) => {
     const taskDistribution = charts.taskDistribution || {};
@@ -50,6 +51,8 @@ const UserDashboard = () => {
   useEffect(() => {
     const load = async () => {
       try {
+        axiosInstance.get(API_PATHS.TASKS.MY_DASHBOARD, { params: { tzOffset: new Date().getTimezoneOffset() } })
+          .then(({ data }) => setMine(data)).catch(() => {});
         const response = await axiosInstance.get(API_PATHS.TASKS.GET_USER_DASHBOARD_DATA);
         const data = response.data.data;
         if (data) {
@@ -74,6 +77,26 @@ const UserDashboard = () => {
           </h2>
           <p className="text-sm text-mist mt-1.5 num">{moment().format('dddd, D MMMM YYYY')}</p>
         </header>
+
+        <section aria-label="What needs your attention" className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          {[
+            ['Overdue', mine?.overdue, 'Overdue', mine?.overdue ? 'text-alert' : 'text-beam'],
+            ['Due today', mine?.dueToday, 'Today', mine?.dueToday ? 'text-signal' : 'text-beam'],
+            ['In progress', mine?.inProgress, 'All', 'text-active'],
+            ['Upcoming', mine?.upcoming, 'Upcoming', 'text-beam'],
+            ['Done this week', mine?.completedThisWeek, 'Completed', 'text-done'],
+          ].map(([label, value, tab, tone]) => (
+            <button
+              key={label} type="button"
+              className="panel p-5 text-left cursor-pointer hover:bg-white/[0.06] transition-colors"
+              onClick={() => navigate(`/my-work${tab === 'All' ? '' : `?tab=${tab}`}`, { viewTransition: true })}
+            >
+              <p className="text-[11px] uppercase tracking-wide text-dusk">{label}</p>
+              <p className={`font-display text-3xl num mt-1 ${tone}`}>{value ?? '–'}</p>
+              <p className="text-xs text-dusk mt-1">{value === 1 ? 'task' : 'tasks'}</p>
+            </button>
+          ))}
+        </section>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <InfoCard
@@ -123,7 +146,7 @@ const UserDashboard = () => {
         <section className="panel p-6">
           <div className="flex items-center justify-between gap-4">
             <h3 className="font-display text-base text-beam">Recent tasks</h3>
-            <button className="btn btn-sm" onClick={() => navigate('/user/tasks', { viewTransition: true })}>
+            <button className="btn btn-sm" onClick={() => navigate('/my-work', { viewTransition: true })}>
               See all <LuArrowRight />
             </button>
           </div>

@@ -1513,6 +1513,123 @@ const waitForServer = async () => {
         assert.strictEqual((await call("GET", `/api/tasks/${t4._id}`, { token: A })).body.project, null, "tasks outlive their project");
         pass("Projects", "CRUD + validation, department visibility, head limits, dashboard stats, project/department task filters, delete keeps tasks");
 
+        // ---------- 5f. MY WORK, DASHBOARDS, TIME TRACKING, REMINDERS ----------
+        const dan = await signUp({ name: "Dan Dash", email: "dan@example.test", password: "pw123456" });
+        const D = dan.token;
+        const todayNoonUtc = new Date(); todayNoonUtc.setUTCHours(12, 0, 0, 0);
+
+        // members may create tasks for themselves only
+        const selfMade = await call("POST", "/api/tasks", { token: D, body: { title: "My own errand", assignedTo: [dan._id], dueDate: day(4) } });
+        assert.strictEqual(selfMade.status, 201, `member creates for self: ${selfMade.text}`);
+        assert.strictEqual((await call("POST", "/api/tasks", { token: D, body: { title: "Not mine", assignedTo: [member._id] } })).status, 403, "...but not for someone else");
+        assert.strictEqual((await call("POST", "/api/tasks", { token: D, body: { title: "Mixed", assignedTo: [dan._id, member._id] } })).status, 403, "...nor a mix");
+        assert.strictEqual((await call("PUT", `/api/tasks/${selfMade.body.task._id}`, { token: D, body: { title: "Edited" } })).status, 403, "editing the task body is still admin/head");
+
+        const dTask = (over) => mk({ assignedTo: [dan._id], todoChecklist: [], ...over });
+        await dTask({ title: "Dan overdue", dueDate: day(-2) });
+        await dTask({ title: "Dan today", dueDate: todayNoonUtc.toISOString() });
+        await dTask({ title: "Dan active", dueDate: day(3), status: "In Progress" });
+        await dTask({ title: "Dan later", dueDate: day(5) });
+        const danDone = await dTask({ title: "Dan finished", dueDate: day(1) });
+        await call("PUT", `/api/tasks/${danDone._id}/status`, { token: A, body: { status: "Completed" } });
+        const danCancelled = await dTask({ title: "Dan cancelled", dueDate: day(-3) });
+        await call("PUT", `/api/tasks/${danCancelled._id}/status`, { token: A, body: { status: "Cancelled" } });
+        await mk({ title: "Someone else's", assignedTo: [member._id], dueDate: day(-2) });
+
+        const mineDash = (await call("GET", "/api/tasks/my-dashboard?tzOffset=0", { token: D })).body;
+        // selfMade is due in 4 days, so it is open + upcoming as well
+        assert.deepStrictEqual(
+            { open: mineDash.open, overdue: mineDash.overdue, dueToday: mineDash.dueToday, inProgress: mineDash.inProgress, upcoming: mineDash.upcoming, completedThisWeek: mineDash.completedThisWeek },
+            { open: 5, overdue: 1, dueToday: 1, inProgress: 1, upcoming: 3, completedThisWeek: 1 },
+            "employee dashboard: own tasks only, cancelled ignored, due today is not overdue");
+        assert.strictEqual((await call("GET", "/api/tasks/my-dashboard")).status, 401);
+
+        // My Work tabs are plain filters over the same list
+        const nowIso = new Date().toISOString();
+        const startOfToday = new Date(todayNoonUtc); startOfToday.setUTCHours(0, 0, 0, 0);
+        const endOfToday = new Date(startOfToday.getTime() + 24 * 3600 * 1000);
+        const tab = async (q) => (await call("GET", `/api/tasks?mine=true&limit=50&${q}`, { token: D })).body.tasks.map((t) => t.title).sort();
+        assert.deepStrictEqual(await tab(`open=true&dueBefore=${new Date(startOfToday - 1).toISOString()}`), ["Dan overdue"], "Overdue tab");
+        assert.deepStrictEqual(await tab(`open=true&dueAfter=${startOfToday.toISOString()}&dueBefore=${new Date(endOfToday - 1).toISOString()}`), ["Dan today"], "Today tab");
+        assert.deepStrictEqual(await tab(`open=true&dueAfter=${endOfToday.toISOString()}`), ["Dan active", "Dan later", "My own errand"], "Upcoming tab");
+        assert.deepStrictEqual(await tab("status=Completed"), ["Dan finished"], "Completed tab");
+        assert.strictEqual((await tab("")).length, 7, "All tab: everything assigned to me");
+        assert.ok(nowIso);
+
+        // mine=true narrows a wide scope; assignee filters inside it
+        const adminMine = (await call("GET", "/api/tasks?mine=true&limit=50", { token: A })).body.tasks;
+        assert.ok(adminMine.every((t) => t.assignedTo.some((u) => u._id === admin._id)), "an admin's My Work is only theirs");
+        const byAssignee = (await call("GET", `/api/tasks?assignee=${dan._id}&limit=50`, { token: A })).body;
+        assert.strictEqual(byAssignee.pagination.total, 7, "filter by employee");
+        assert.strictEqual((await call("GET", `/api/tasks?assignee=${dan._id}`, { token: O })).body.tasks.length, 0, "the assignee filter cannot widen scope");
+        assert.strictEqual((await call("GET", "/api/tasks?assignee=junk", { token: A })).body.tasks.length, 0);
+
+        // manager dashboard: totals + per-employee table, scoped
+        assert.strictEqual((await call("GET", "/api/tasks/manager-dashboard", { token: D })).status, 403, "members have no manager dashboard");
+        const mgr = (await call("GET", "/api/tasks/manager-dashboard?tzOffset=0", { token: A })).body;
+        const danRow = mgr.employees.find((e) => e._id === dan._id);
+        assert.deepStrictEqual({ open: danRow.open, overdue: danRow.overdue }, { open: 5, overdue: 1 }, "employee row");
+        assert.ok(mgr.totals.open >= 5 && mgr.totals.overdue >= 1 && "blocked" in mgr.totals && "inReview" in mgr.totals && "completedThisWeek" in mgr.totals, "company totals present");
+        const p4_sorted = mgr.employees.map((e) => e.overdue);
+        assert.deepStrictEqual(p4_sorted, [...p4_sorted].sort((a, b) => b - a), "most overdue first");
+        await mk({ title: "Head's team task", assignedTo: [pjMate._id], dueDate: day(-1) });
+        const p4_headDash = (await call("GET", "/api/tasks/manager-dashboard", { token: PH })).body;
+        assert.ok(p4_headDash.employees.some((e) => e._id === pjMate._id && e.open === 1 && e.overdue === 1), "a head sees their department");
+        assert.ok(!p4_headDash.employees.some((e) => e._id === dan._id), "...and nobody outside it");
+        assert.ok(p4_headDash.totals.open < mgr.totals.open, "head totals are department-scoped");
+
+        // time tracking
+        const timed = await dTask({ title: "Timed job", dueDate: day(6) });
+        const T = `/api/tasks/${timed._id}`;
+        assert.strictEqual((await call("PUT", `${T}/time`, { token: D, body: { estimatedMinutes: 240 } })).body.estimatedMinutes, 240);
+        for (const bad of [-1, 1.5, "4h", 60 * 24 * 400]) {
+            assert.strictEqual((await call("PUT", `${T}/time`, { token: D, body: { estimatedMinutes: bad } })).status, 400, `reject estimate ${bad}`);
+        }
+        assert.strictEqual((await call("PUT", `${T}/time`, { token: O, body: { estimatedMinutes: 5 } })).status, 403, "outsiders cannot track time");
+        const racers = await Promise.all([call("POST", `${T}/timer/start`, { token: D }), call("POST", `${T}/timer/start`, { token: D })]);
+        assert.deepStrictEqual(racers.map((r) => r.status).sort(), [200, 409], "two simultaneous starts: exactly one wins");
+        const other = await dTask({ title: "Second job", dueDate: day(6) });
+        const second = await call("POST", `/api/tasks/${other._id}/timer/start`, { token: D });
+        assert.strictEqual(second.status, 409, "one running timer per person");
+        assert.ok(/Timed job/.test(second.body.message), "says which one is running");
+        assert.strictEqual((await call("POST", `${T}/timer/stop`, { token: O })).status, 403);
+        const stopped = await call("POST", `${T}/timer/stop`, { token: D });
+        assert.strictEqual(stopped.status, 200);
+        assert.ok(stopped.body.actualMinutes >= 1 && stopped.body.timerStartedAt === null, "stopping logs at least a minute and clears the timer");
+        assert.strictEqual((await call("POST", `${T}/timer/stop`, { token: D })).status, 409, "stopping twice is refused");
+        assert.strictEqual((await call("PUT", `${T}/time`, { token: D, body: { actualMinutes: 205 } })).body.actualMinutes, 205, "actual time can be corrected by hand");
+        assert.strictEqual((await call("PUT", `${T}/time`, { token: D, body: { estimatedMinutes: null } })).body.estimatedMinutes, null, "an estimate can be removed");
+        assert.strictEqual((await call("PUT", `${T}/time`, { token: D, body: { actualMinutes: null } })).status, 400);
+        const timeKinds = (await call("GET", T, { token: A })).body.activity.filter((e) => e.type === "time").length;
+        assert.ok(timeKinds >= 5, "time changes appear in the timeline");
+        assert.strictEqual((await call("POST", `/api/tasks/${other._id}/timer/start`, { token: D })).status, 200, "free to start another after stopping");
+        await call("POST", `/api/tasks/${other._id}/timer/stop`, { token: D });
+
+        // reminders: validation, scheduling, one send, re-arm
+        assert.strictEqual((await call("POST", "/api/tasks", { token: A, body: { title: "r", assignedTo: [dan._id], reminder: { type: "1h" } } })).status, 400, "a reminder needs a due date");
+        assert.strictEqual((await call("POST", "/api/tasks", { token: A, body: { title: "r", assignedTo: [dan._id], dueDate: day(2), reminder: { type: "weekly" } } })).status, 400, "unknown reminder type");
+        assert.strictEqual((await call("POST", "/api/tasks", { token: A, body: { title: "r", assignedTo: [dan._id], dueDate: day(2), reminder: { type: "custom", customMinutes: 0 } } })).status, 400, "custom needs minutes");
+        const remDue = day(3);
+        const remTask = await mk({ title: "Reminder in a day", assignedTo: [dan._id], dueDate: remDue, reminder: { type: "1d" } });
+        const remDetail = (await call("GET", `/api/tasks/${remTask._id}`, { token: A })).body;
+        assert.strictEqual(new Date(remDetail.remindAt).getTime(), new Date(remDue).getTime() - 24 * 3600 * 1000, "remindAt = due minus the lead time");
+        const soon = new Date(Date.now() + 30 * 60 * 1000).toISOString(); // due in 30 min, reminder "1 hour before" => already due to fire
+        const remNow = await mk({ title: "Reminder fires now", assignedTo: [dan._id], dueDate: soon, reminder: { type: "1h" } });
+        let firstReminders = [];
+        for (let i = 0; i < 25 && firstReminders.length === 0; i += 1) {
+            await sleep(1000);
+            firstReminders = (await call("GET", "/api/notifications?limit=100", { token: D })).body.notifications.filter((n) => n.title === "Reminder: Reminder fires now");
+        }
+        assert.strictEqual(firstReminders.length, 1, "the reminder is delivered");
+        await sleep(7000); // two more scans
+        assert.strictEqual((await call("GET", "/api/notifications?limit=100", { token: D })).body.notifications.filter((n) => n.title === "Reminder: Reminder fires now").length, 1, "and only once");
+        assert.ok((await call("GET", `/api/tasks/${remNow._id}`, { token: A })).body.reminderSentAt, "the claim is recorded on the task");
+        const rearmed = await call("PUT", `/api/tasks/${remNow._id}`, { token: A, body: { dueDate: day(5) } });
+        assert.strictEqual(rearmed.body.updatedTask.reminderSentAt, null, "moving the due date re-arms the reminder");
+        assert.strictEqual((await call("PUT", `/api/tasks/${remNow._id}`, { token: A, body: { dueDate: null } })).status, 400, "cannot drop the due date while a reminder is set");
+        assert.strictEqual((await call("PUT", `/api/tasks/${remNow._id}`, { token: A, body: { reminder: { type: "none" }, dueDate: null } })).status, 200, "...unless the reminder goes too");
+        pass("Work & reminders", "My Work filters, employee + manager dashboards (scoped), self-created tasks, timers (atomic, one per person), reminders (once, re-armed)");
+
         console.log("\n  FEATURE VERIFICATION\n  " + "=".repeat(74));
         results.forEach((r) => console.log(`  [PASS] ${r.feature.padEnd(28)} ${r.detail}`));
         console.log("  " + "=".repeat(74));

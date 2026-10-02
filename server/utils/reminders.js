@@ -3,6 +3,7 @@ const { OPEN } = require('./taskStatus.js');
 const Notification = require('../model/notification.model.js');
 const { notify } = require('./notify.js');
 const { departmentHeadsOf } = require('./scope.js');
+const { MINUTE: MS_PER_MINUTE } = require('./workTime.js');
 
 const MINUTE = 60 * 1000;
 const WINDOW_HOURS = Number(process.env.REMINDER_WINDOW_HOURS) || 24;
@@ -95,10 +96,40 @@ const scanEscalations = async (now = new Date()) => {
     return sentCount;
 };
 
-// ponytail: in-process setInterval. Move to a real scheduler (cron/queue) if you run multiple instances.
+/**
+ * Per-task reminders ("1 hour before" etc). Safe with several app instances running:
+ * each task is claimed with a conditional update, and only the instance that wins
+ * the claim sends - everyone else sees modifiedCount 0 and skips it.
+ */
+const scanReminders = async (now = new Date()) => {
+    const due = await Task.find({ remindAt: { $lte: now }, reminderSentAt: null, status: OPEN })
+        .select("title dueDate assignedTo").limit(500);
+
+    let sent = 0;
+    for (const task of due) {
+        const claim = await Task.updateOne({ _id: task._id, reminderSentAt: null }, { $set: { reminderSentAt: now } });
+        if (!claim.modifiedCount) continue;
+
+        const minutes = Math.round((task.dueDate - now) / MS_PER_MINUTE);
+        const when = minutes > 0 ? `is due ${formatDate(task.dueDate)}` : "is due now";
+        await notify({
+            userIds: task.assignedTo,
+            type: "deadline",
+            task: task._id,
+            title: `Reminder: ${task.title}`,
+            message: `"${task.title}" ${when}.`,
+        });
+        sent += 1;
+    }
+    return sent;
+};
+
+// ponytail: in-process setInterval. Reminders are claim-guarded so extra instances cannot double-send;
+// the deadline/escalation scans above still dedupe by notification lookup - move them to a queue in the jobs phase.
 const startReminders = () => {
     const run = () => scanDeadlines()
         .then(() => scanEscalations())
+        .then(() => scanReminders())
         .catch((err) => console.error("Reminder scan failed:", err.message));
     run();
     const timer = setInterval(run, INTERVAL_MINUTES * MINUTE);
@@ -107,4 +138,4 @@ const startReminders = () => {
     return timer;
 };
 
-module.exports = { startReminders, scanDeadlines, scanEscalations };
+module.exports = { startReminders, scanDeadlines, scanEscalations, scanReminders };

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useContext, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { API_PATHS } from '../../utils/apiPaths';
 import axiosInstance from '../../utils/axiosInstance';
@@ -8,12 +8,15 @@ import AvatarGroup from '../../components/layouts/AvatarGroup';
 import Progress from '../../components/layouts/Progress';
 import TaskComments from '../../components/TaskComments';
 import { categoryColor, statusChip, priorityChip, SETTABLE_STATUS_DATA } from '../../utils/data';
-import { TagChips, WaitingBanner, WatchButton, Subtasks, BlockedBy, ActivityTimeline } from '../../components/TaskExtras';
+import { TagChips, WaitingBanner, WatchButton, Subtasks, BlockedBy, ActivityTimeline, TimeTracker } from '../../components/TaskExtras';
+import { reminderLabel } from '../../utils/helper';
+import { UserContext } from '../../context/userContext';
 import { LuSquareArrowUpRight, LuTriangleAlert, LuCheck, LuRepeat } from 'react-icons/lu';
 import toast from 'react-hot-toast';
 
 const ViewTaskDetails = () => {
   const { id } = useParams();
+  const { user } = useContext(UserContext);
   const [task, setTask] = useState(null);
   const [reviewNote, setReviewNote] = useState("");
   const [reviewing, setReviewing] = useState(false);
@@ -234,6 +237,13 @@ const ViewTaskDetails = () => {
             onChange={({ blockedBy, waitingFor }) => setTask((prev) => ({ ...prev, blockedBy, waitingFor }))}
           />
 
+          <TimeTracker
+            task={task}
+            userId={user?._id}
+            isAdmin={user?.role === 'admin'}
+            onChange={(time) => setTask((prev) => ({ ...prev, ...time }))}
+          />
+
           <div>
             <p className="field-label mb-2">Progress</p>
             <div className="flex items-baseline justify-between mb-2">
@@ -253,6 +263,7 @@ const ViewTaskDetails = () => {
               {isOverdue && <LuTriangleAlert className="shrink-0" />}
               {task.dueDate ? moment(task.dueDate).format("D MMM YYYY") : 'Not set'}
             </p>
+            {task.dueDate && <p className="text-xs text-dusk mt-1">Reminder: {reminderLabel(task.reminder)}</p>}
             {isOverdue && (
               <p className="text-xs text-alert/80 mt-1">
                 Overdue by {moment(task.dueDate).fromNow(true)}.

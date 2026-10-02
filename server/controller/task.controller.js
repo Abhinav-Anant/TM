@@ -10,6 +10,7 @@ const { normalizeTags, openBlockers, waitingForByTask } = require('../utils/task
 const Project = require('../model/project.model.js');
 const Department = require('../model/department.model.js');
 const { canViewProject } = require('../utils/projectScope.js');
+const { dayBounds, reminderError, computeRemindAt } = require('../utils/workTime.js');
 
 const SORTABLE_FIELDS = ["dueDate", "createdAt", "updatedAt", "priority", "progress", "title"];
 
@@ -24,7 +25,7 @@ const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
  * consistent with the other active filters.
  */
 const buildFilters = (scope, query) => {
-    const { status, priority, category, tag, project, department, search, dueBefore, dueAfter, overdue } = query;
+    const { status, priority, category, tag, project, department, assignee, open, search, dueBefore, dueAfter, overdue } = query;
     const base = { ...scope };
 
     if (priority && priority.trim()) base.priority = priority.trim();
@@ -32,6 +33,11 @@ const buildFilters = (scope, query) => {
     if (tag && tag.trim()) base.tags = normalizeTags([tag])[0];
     // A malformed id matches nothing rather than blowing up the cast.
     if (project && project.trim()) base.project = mongoose.isValidObjectId(project) ? project : { $in: [] };
+    // An employee's own tasks, on top of whatever the caller's scope already allows.
+    if (assignee && assignee.trim()) {
+        base.$and = [...(base.$and || []), { assignedTo: mongoose.isValidObjectId(assignee) ? new mongoose.Types.ObjectId(assignee) : { $in: [] } }];
+    }
+    if (open === "true") base.status = OPEN;
     if (department && department.trim()) base.department = mongoose.isValidObjectId(department) ? department : { $in: [] };
 
     if ((dueBefore && dueBefore.trim()) || (dueAfter && dueAfter.trim())) {
@@ -143,6 +149,9 @@ const spawnNext = async (task) => {
             tags: task.tags,
             watchers: task.watchers,
             dueDate: nextDueDate(task.dueDate, task.recurrence),
+            reminder: task.reminder,
+            remindAt: computeRemindAt(nextDueDate(task.dueDate, task.recurrence), task.reminder),
+            estimatedMinutes: task.estimatedMinutes,
             assignedTo: task.assignedTo,
             createdBy: task.createdBy,
             attachments: task.attachments,
@@ -280,36 +289,35 @@ const getDashboardData = async (req, res) => {
 
 const getUserDashboardData = async (req, res) => {
     try {
-        const assignedTasks = await Task.find({ assignedTo: req.user._id })
-            .sort({ dueDate: 1 })
-            .populate("assignedTo", "name email profileImageUrl");
+        const mine = { assignedTo: req.user._id };
 
-        const statusSummary = { Pending: 0, InProgress: 0, InReview: 0, Completed: 0 };
-        const prioritySummary = { Low: 0, Medium: 0, High: 0 };
+        // Counts and a short recent list in the database - never the whole task set.
+        const [statusGroups, priorityGroups, overdueTasks, recent] = await Promise.all([
+            Task.aggregate([{ $match: mine }, { $group: { _id: "$status", count: { $sum: 1 } } }]),
+            Task.aggregate([{ $match: mine }, { $group: { _id: "$priority", count: { $sum: 1 } } }]),
+            Task.countDocuments({ ...mine, status: OPEN, dueDate: { $lt: dayBounds(parseInt(req.query.tzOffset, 10) || 0).start } }),
+            Task.find(mine).sort({ dueDate: 1, _id: 1 }).limit(10).select("-activity").populate("assignedTo", "name email profileImageUrl"),
+        ]);
 
-        assignedTasks.forEach((task) => {
-            if (task.status === "To Do") statusSummary.Pending += 1;
-            else if (task.status === "In Progress") statusSummary.InProgress += 1;
-            else if (task.status === "In Review") statusSummary.InReview += 1;
-            else if (task.status === "Completed") statusSummary.Completed += 1;
-
-            if (prioritySummary[task.priority] !== undefined) prioritySummary[task.priority] += 1;
-        });
-
-        const now = new Date();
-        const overdueTasks = assignedTasks.filter(
-            (task) => task.status !== "Completed" && task.dueDate < now
-        ).length;
+        const byStatus = Object.fromEntries(statusGroups.map((g) => [g._id, g.count]));
+        const statusSummary = {
+            Pending: byStatus["To Do"] || 0,
+            InProgress: byStatus["In Progress"] || 0,
+            InReview: byStatus["In Review"] || 0,
+            Completed: byStatus["Completed"] || 0,
+        };
+        const prioritySummary = { Low: 0, Medium: 0, High: 0, Urgent: 0 };
+        priorityGroups.forEach((g) => { if (prioritySummary[g._id] !== undefined) prioritySummary[g._id] = g.count; });
 
         return res.json({
             message: "User dashboard data retrieved successfully",
             data: {
                 charts: {
-                    taskDistribution: { All: assignedTasks.length, ...statusSummary },
+                    taskDistribution: { All: statusGroups.reduce((n, g) => n + g.count, 0), ...statusSummary },
                     taskPriorityLevels: prioritySummary,
                 },
                 overdueTasks,
-                recentTasks: assignedTasks.map(withCompletedCount).slice(0, 10),
+                recentTasks: recent.map(withCompletedCount),
             },
         });
     } catch (error) {
@@ -321,7 +329,9 @@ const getUserDashboardData = async (req, res) => {
 // Get all tasks (Admin: all, User: only assigned) with search, filtering and sorting.
 const getTasks = async (req, res) => {
     try {
-        const { base, filter } = buildFilters(await scopeFor(req.user), req.query);
+        // mine=true is "My Work": only tasks assigned to me, even for a head or admin whose scope is wider.
+        const scope = req.query.mine === "true" ? { assignedTo: req.user._id } : await scopeFor(req.user);
+        const { base, filter } = buildFilters(scope, req.query);
 
         const { page, limit } = pageParams(req.query);
         const skip = (page - 1) * limit;
@@ -528,6 +538,7 @@ const createTask = async (req, res) => {
             requiresReview, recurrence, startDate, tags, status,
             project, department,
         } = req.body;
+        const { body } = req;
 
         if (!String(title || "").trim()) {
             return res.status(400).json({ message: "Title is required" });
@@ -550,9 +561,20 @@ const createTask = async (req, res) => {
             return res.status(400).json({ message: `recurrence must be one of ${RECURRENCES.join(", ")}` });
         }
 
-        // Admins assign to anyone; a head only to their own department.
-        if (!await canAssignTo(req.user, assignedTo)) {
-            return res.status(403).json({ message: "You can only assign tasks to members of your own department" });
+        // Admins assign to anyone; a head only to their own department; a member only to themselves.
+        const selfOnly = req.user.role === "member"
+            && assignedTo.length > 0 && assignedTo.every((id) => String(id) === String(req.user._id));
+        if (!selfOnly && !await canAssignTo(req.user, assignedTo)) {
+            return res.status(403).json({ message: req.user.role === "member"
+                ? "You can only create tasks for yourself"
+                : "You can only assign tasks to members of your own department" });
+        }
+
+        const reminder = body.reminder || { type: "none" };
+        const badReminder = reminderError(reminder);
+        if (badReminder) return res.status(400).json({ message: badReminder });
+        if (reminder.type !== "none" && !dueDate) {
+            return res.status(400).json({ message: "A reminder needs a due date" });
         }
 
         const link = await checkLinks(req.user, { project, department });
@@ -561,6 +583,9 @@ const createTask = async (req, res) => {
         const task = await Task.create({
             project: project || null,
             department: department || null,
+            reminder,
+            remindAt: computeRemindAt(dueDate, reminder),
+            estimatedMinutes: Number.isInteger(body.estimatedMinutes) && body.estimatedMinutes >= 0 ? body.estimatedMinutes : null,
             title: title.trim(), description, priority, status,
             category: category || "General",
             startDate: startDate || null,
@@ -655,6 +680,20 @@ const updateTask = async (req, res) => {
             if (link) return res.status(link.status).json({ message: link.message });
             if ("project" in body) task.project = body.project || null;
             if ("department" in body) task.department = body.department || null;
+        }
+
+        if ("reminder" in body || "dueDate" in body) {
+            if ("reminder" in body) {
+                const badReminder = reminderError(body.reminder);
+                if (badReminder) return res.status(400).json({ message: badReminder });
+                task.reminder = body.reminder;
+            }
+            if (task.reminder?.type && task.reminder.type !== "none" && !task.dueDate) {
+                return res.status(400).json({ message: "A reminder needs a due date" });
+            }
+            // New due date or reminder means a fresh chance to fire.
+            task.remindAt = computeRemindAt(task.dueDate, task.reminder);
+            task.reminderSentAt = null;
         }
 
         // Timeline: one line per thing that actually changed.

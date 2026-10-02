@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import moment from 'moment';
 import toast from 'react-hot-toast';
-import { LuPlus, LuX, LuLink, LuBan, LuEye, LuEyeOff, LuCircleCheck, LuCircle, LuLoaderCircle } from 'react-icons/lu';
+import { LuPlus, LuX, LuLink, LuBan, LuEye, LuEyeOff, LuCircleCheck, LuCircle, LuLoaderCircle, LuPlay, LuSquare } from 'react-icons/lu';
 import axiosInstance from '../utils/axiosInstance';
 import { API_PATHS } from '../utils/apiPaths';
 import { statusChip } from '../utils/data';
+import { formatMinutes, parseDuration } from '../utils/helper';
 
 const errorOf = (error) => error.response?.data?.message || "That did not go through.";
 
@@ -213,3 +214,86 @@ export const ActivityTimeline = ({ activity = [] }) => (
     </ol>
   </div>
 );
+
+/** Optional time tracking: estimate, time spent, and a start/stop timer. */
+export const TimeTracker = ({ task, userId, isAdmin, onChange }) => {
+  const [now, setNow] = useState(Date.now());
+  const [editing, setEditing] = useState(false);
+  const [estimate, setEstimate] = useState('');
+  const [actual, setActual] = useState('');
+  const running = Boolean(task.timerStartedAt);
+  const mine = running && (String(task.timerBy?._id || task.timerBy) === String(userId) || isAdmin);
+
+  useEffect(() => {
+    if (!running) return undefined;
+    const timer = setInterval(() => setNow(Date.now()), 15000);
+    return () => clearInterval(timer);
+  }, [running]);
+
+  const call = async (request) => {
+    try {
+      const { data } = await request();
+      onChange(data);
+      return true;
+    } catch (error) {
+      toast.error(errorOf(error));
+      return false;
+    }
+  };
+
+  const liveMinutes = running ? Math.max(0, Math.floor((now - new Date(task.timerStartedAt).getTime()) / 60000)) : 0;
+
+  const startEdit = () => {
+    setEstimate(task.estimatedMinutes === null || task.estimatedMinutes === undefined ? '' : formatMinutes(task.estimatedMinutes));
+    setActual(formatMinutes(task.actualMinutes || 0));
+    setEditing(true);
+  };
+
+  const save = async (e) => {
+    e.preventDefault();
+    const est = parseDuration(estimate);
+    const act = parseDuration(actual);
+    if (Number.isNaN(est) || Number.isNaN(act) || act === null) {
+      toast.error('Use times like 4h, 1h 30m or 90m.');
+      return;
+    }
+    if (await call(() => axiosInstance.put(API_PATHS.TASKS.TIME(task._id), { estimatedMinutes: est, actualMinutes: act }))) setEditing(false);
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <p className="field-label">Time</p>
+        {!editing && <button type="button" className="text-xs text-signal hover:underline cursor-pointer" onClick={startEdit}>Edit</button>}
+      </div>
+
+      {editing ? (
+        <form onSubmit={save} className="space-y-2">
+          <label className="block text-xs text-mist">Estimated
+            <input className="field py-2 mt-1" placeholder="e.g. 4h" value={estimate} onChange={(e) => setEstimate(e.target.value)} />
+          </label>
+          <label className="block text-xs text-mist">Time spent
+            <input className="field py-2 mt-1" placeholder="e.g. 3h 25m" value={actual} onChange={(e) => setActual(e.target.value)} />
+          </label>
+          <div className="flex gap-2">
+            <button type="submit" className="btn btn-sm btn-primary">Save</button>
+            <button type="button" className="btn btn-sm" onClick={() => setEditing(false)}>Cancel</button>
+          </div>
+        </form>
+      ) : (
+        <>
+          <p className="text-sm text-beam num">
+            {task.estimatedMinutes !== null && task.estimatedMinutes !== undefined ? <>Estimated: {formatMinutes(task.estimatedMinutes)}<br /></> : null}
+            Actual: {formatMinutes((task.actualMinutes || 0) + liveMinutes)}
+            {running && <span className="text-active"> (running)</span>}
+          </p>
+          {running ? (
+            mine && <button type="button" className="btn btn-sm mt-2" onClick={() => call(() => axiosInstance.post(API_PATHS.TASKS.TIMER_STOP(task._id)))}><LuSquare /> Stop timer</button>
+          ) : (
+            <button type="button" className="btn btn-sm mt-2" onClick={() => call(() => axiosInstance.post(API_PATHS.TASKS.TIMER_START(task._id)))}><LuPlay /> Start timer</button>
+          )}
+        </>
+      )}
+    </div>
+  );
+};

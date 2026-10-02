@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const { RECURRENCES } = require('../utils/recurrence.js');
 const { STATUSES, PRIORITIES } = require('../utils/taskStatus.js');
+const { REMINDER_TYPES } = require('../utils/workTime.js');
 
 const todoSchema = new mongoose.Schema({
     text: { type: String, required: true }, 
@@ -48,6 +49,18 @@ const taskSchema = new mongoose.Schema({
     project: { type: mongoose.Schema.Types.ObjectId, ref: "Project", default: null },
     department: { type: mongoose.Schema.Types.ObjectId, ref: "Department", default: null },
     startDate: { type: Date, default: null },
+    // Optional time tracking. The timer is two fields, claimed atomically (see taskWork.controller).
+    estimatedMinutes: { type: Number, default: null, min: 0 },
+    actualMinutes: { type: Number, default: 0, min: 0 },
+    timerStartedAt: { type: Date, default: null },
+    timerBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    // Reminder before the due date. remindAt is derived; reminderSentAt is the multi-instance "already sent" claim.
+    reminder: {
+        type: { type: String, enum: REMINDER_TYPES, default: 'none' },
+        customMinutes: { type: Number, default: null },
+    },
+    remindAt: { type: Date, default: null },
+    reminderSentAt: { type: Date, default: null },
     dueDate: { type: Date, default: null },
     tags: { type: [String], default: [] },
     // People who asked to hear about changes, on top of assignees and creator.
@@ -83,6 +96,8 @@ taskSchema.index({ assignedTo: 1, status: 1, dueDate: 1 });
 taskSchema.index({ createdAt: -1 });
 taskSchema.index({ category: 1 });
 taskSchema.index({ tags: 1 });
+taskSchema.index({ remindAt: 1, reminderSentAt: 1 });
+taskSchema.index({ timerBy: 1 }, { sparse: true });
 taskSchema.index({ project: 1, status: 1 });
 taskSchema.index({ department: 1 });
 taskSchema.index({ watchers: 1 });

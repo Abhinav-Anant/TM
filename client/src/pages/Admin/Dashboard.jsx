@@ -6,8 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import axiosInstance from '../../utils/axiosInstance';
 import { API_PATHS } from '../../utils/apiPaths';
 import moment from 'moment';
-import { LuListChecks, LuCircleCheck, LuLoaderCircle, LuClock, LuArrowRight } from 'react-icons/lu';
-import InfoCard from '../../components/Cards/InfoCard';
+import { LuArrowRight } from 'react-icons/lu';
 import CustomPieChart from '../../components/Charts/CustomPieChart';
 import { basePathFor } from '../../utils/roles';
 
@@ -25,10 +24,13 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [manager, setManager] = useState(null);
 
   useEffect(() => {
     const load = async () => {
       try {
+        axiosInstance.get(API_PATHS.TASKS.MANAGER_DASHBOARD, { params: { tzOffset: new Date().getTimezoneOffset() } })
+          .then(({ data }) => setManager(data)).catch(() => {});
         const response = await axiosInstance.get(API_PATHS.TASKS.GET_DASHBOARD_DATA);
         if (response.data) setDashboardData(response.data.data);
       } catch (error) {
@@ -68,12 +70,53 @@ const Dashboard = () => {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <InfoCard icon={<LuListChecks />} label="All tasks" value={d.allTasksCount || 0} color="bg-ice" tone="text-ice" />
-              <InfoCard icon={<LuClock />} label="To do" value={d.pendingTasksCount || 0} color="bg-pending" tone="text-pending" />
-              <InfoCard icon={<LuLoaderCircle />} label="In progress" value={d.inProgressTasksCount || 0} color="bg-active" tone="text-active" />
-              <InfoCard icon={<LuCircleCheck />} label="Completed" value={d.completedTasksCount || 0} color="bg-done" tone="text-done" />
-            </div>
+            <section aria-label="Team headline numbers" className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+              {[
+                ['Open tasks', manager?.totals.open, 'text-beam'],
+                ['Overdue', manager?.totals.overdue, manager?.totals.overdue ? 'text-alert' : 'text-beam'],
+                ['Due today', manager?.totals.dueToday, manager?.totals.dueToday ? 'text-signal' : 'text-beam'],
+                ['Blocked', manager?.totals.blocked, manager?.totals.blocked ? 'text-alert' : 'text-beam'],
+                ['In review', manager?.totals.inReview, 'text-signal'],
+                ['Done this week', manager?.totals.completedThisWeek, 'text-done'],
+              ].map(([label, value, tone]) => (
+                <div key={label} className="panel p-5">
+                  <p className="text-[11px] uppercase tracking-wide text-dusk">{label}</p>
+                  <p className={`font-display text-3xl num mt-1 ${tone}`}>{value ?? '–'}</p>
+                </div>
+              ))}
+            </section>
+
+            <section className="panel p-6">
+              <h3 className="font-display text-base text-beam">Who has what</h3>
+              <div className="overflow-x-auto mt-3">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-dusk">
+                      <th className="py-2 pr-4 font-medium">Employee</th>
+                      <th className="py-2 px-4 font-medium text-right">Open</th>
+                      <th className="py-2 pl-4 font-medium text-right">Overdue</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(manager?.employees || []).map((e) => (
+                      <tr key={e._id} className="border-t border-white/8">
+                        <td className="py-2.5 pr-4">
+                          <button
+                            type="button" className="text-beam hover:text-signal cursor-pointer text-left"
+                            onClick={() => navigate(`${basePathFor(user)}/tasks?assignee=${e._id}&name=${encodeURIComponent(e.name)}`, { viewTransition: true })}
+                          >
+                            {e.name}
+                          </button>
+                        </td>
+                        <td className="py-2.5 px-4 text-right num text-beam">{e.open}</td>
+                        <td className={`py-2.5 pl-4 text-right num ${e.overdue ? 'text-alert font-medium' : 'text-dusk'}`}>{e.overdue}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {manager && manager.employees.length === 0 && <p className="text-sm text-dusk py-4">No people to show yet.</p>}
+              </div>
+            </section>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <section className="panel p-6 lg:col-span-2">
