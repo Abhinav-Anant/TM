@@ -4,6 +4,8 @@ import { UserContext } from '../../context/userContext';
 import { useNavigate } from 'react-router-dom';
 import { SIDE_MENU_DATA, SIDE_MENU_USER_DATA, SIDE_MENU_HEAD_DATA } from '../../utils/data';
 import { hasModule } from '../../utils/roles';
+import axiosInstance from '../../utils/axiosInstance';
+import { API_PATHS } from '../../utils/apiPaths';
 
 const ROLE_BADGE = {
   admin: { label: 'Admin', className: 'chip chip-signal' },
@@ -25,8 +27,8 @@ const SideMenu = ({ activeMenu, onNavigate, variant = 'rail' }) => {
     onNavigate?.();
   };
 
-  const handleLogout = () => {
-    localStorage.clear();
+  const handleLogout = async () => {
+    try { await axiosInstance.post(API_PATHS.AUTH.LOGOUT); } catch { /* cookie expires on its own */ }
     clearUser();
     navigate('/login');
   };

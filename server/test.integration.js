@@ -69,8 +69,10 @@ const startWhatsAppGateway = () => {
 };
 
 // --- http helpers -------------------------------------------------------------
-const call = async (method, url, { token, body, raw } = {}) => {
+const call = async (method, url, { token, body, raw, cookie, origin } = {}) => {
     const headers = {};
+    if (cookie) headers.Cookie = cookie;
+    if (origin) headers.Origin = origin;
     if (token) headers.Authorization = `Bearer ${token}`;
     if (body && !raw) headers["Content-Type"] = "application/json";
     if (raw) Object.assign(headers, raw.headers);
@@ -84,7 +86,7 @@ const call = async (method, url, { token, body, raw } = {}) => {
     const text = await response.text();
     let json = null;
     try { json = JSON.parse(text); } catch { /* html or binary */ }
-    return { status: response.status, body: json, text };
+    return { status: response.status, body: json, text, headers: response.headers };
 };
 
 /** Opens the SSE stream and collects every pushed event. */
@@ -113,25 +115,22 @@ const openStream = (token) => new Promise((resolve, reject) => {
     req.end();
 });
 
-const uploadFiles = async (token, files) => {
+const multipart = (field, files) => {
     const boundary = `----tmtest${Date.now()}`;
     const parts = [];
     for (const f of files) {
         parts.push(Buffer.from(
-            `--${boundary}\r\nContent-Disposition: form-data; name="files"; filename="${f.name}"\r\n` +
+            `--${boundary}\r\nContent-Disposition: form-data; name="${field}"; filename="${f.name}"\r\n` +
             `Content-Type: ${f.type}\r\n\r\n`
         ));
         parts.push(Buffer.from(f.content));
         parts.push(Buffer.from("\r\n"));
     }
     parts.push(Buffer.from(`--${boundary}--\r\n`));
-    const payload = Buffer.concat(parts);
-
-    return call("POST", "/api/tasks/upload", {
-        token,
-        raw: { headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` }, body: payload },
-    });
+    return { headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` }, body: Buffer.concat(parts) };
 };
+
+const uploadFiles = (token, files) => call("POST", "/api/tasks/upload", { token, raw: multipart("files", files) });
 
 const uploadCsv = async (token, content, name = "members.csv") => {
     const boundary = `----tmcsv${Date.now()}`;
@@ -402,9 +401,10 @@ const waitForServer = async () => {
         assert.strictEqual(upload.body.urls.length, 2);
 
         // the returned URL must actually serve the file back
-        const servedPath = new URL(upload.body.urls[0]).pathname;
-        const served = await call("GET", servedPath);
-        assert.strictEqual(served.status, 200, "uploaded file must be served from /uploads");
+        const servedPath = upload.body.urls[0];
+        assert.ok(servedPath.startsWith("/api/files/"), "attachments are served through the authenticated file route");
+        const served = await call("GET", servedPath, { token: M });
+        assert.strictEqual(served.status, 200, "uploader can read their file");
         assert.strictEqual(served.text, "acceptance criteria", "served bytes match what was uploaded");
 
         const rejected = await uploadFiles(M, [{ name: "payload.exe", type: "application/x-msdownload", content: "MZ" }]);
@@ -413,7 +413,50 @@ const waitForServer = async () => {
         const attached = await call("PUT", `/api/tasks/${design._id}`, { token: A, body: { attachments: upload.body.urls } });
         assert.strictEqual(attached.status, 200);
         assert.strictEqual(attached.body.updatedTask.attachments.length, 2, "attachments saved on the task");
-        pass("File Attachments", "multipart upload, served back over /uploads, mime filter, saved on task");
+        pass("File Attachments", "multipart upload, served back over /api/files, mime filter, saved on task");
+
+        // ---------- 5b. FILE & SESSION SECURITY ----------
+        const secretUrl = upload.body.urls[1]; // budget.csv, attached to `design` (assigned to member)
+        assert.strictEqual((await call("GET", secretUrl)).status, 401, "no session, no file");
+        assert.strictEqual((await call("GET", secretUrl, { token: O })).status, 404, "a user with no access to the task cannot read its file");
+        assert.strictEqual((await call("GET", secretUrl, { token: A })).status, 200, "admin can read it");
+        const download = await call("GET", secretUrl, { token: M });
+        assert.ok(/^attachment/.test(download.headers.get("content-disposition")), "non-image files are forced to download");
+        assert.strictEqual(download.headers.get("x-content-type-options"), "nosniff");
+
+        // an unreferenced upload stays private to its uploader
+        const lone = await uploadFiles(O, [{ name: "mine.txt", type: "text/plain", content: "private" }]);
+        assert.strictEqual((await call("GET", lone.body.urls[0], { token: O })).status, 200);
+        assert.strictEqual((await call("GET", lone.body.urls[0], { token: M })).status, 404, "unattached file is uploader-only");
+        assert.strictEqual((await call("GET", "/api/files/not-an-id", { token: A })).status, 404, "bad id is a 404, not a crash");
+
+        // the old public static route is gone
+        const legacy = await call("GET", "/uploads/anything.txt");
+        assert.notStrictEqual(legacy.status, 200, "/uploads is no longer served");
+
+        // avatar upload needs a session; the result is readable by signed-in users
+        assert.strictEqual((await call("POST", "/api/auth/upload-image", { raw: multipart("image", [{ name: "a.png", type: "image/png", content: "PNGDATA" }]) })).status, 401, "anonymous avatar upload rejected");
+        const avatar = await call("POST", "/api/auth/upload-image", { token: M, raw: multipart("image", [{ name: "a.png", type: "image/png", content: "PNGDATA" }]) });
+        assert.strictEqual(avatar.status, 200);
+        assert.strictEqual((await call("GET", avatar.body.imageUrl, { token: O })).status, 200, "avatars are readable by any signed-in user");
+        assert.strictEqual((await call("PUT", "/api/auth/profile", { token: M, body: { profileImageUrl: "https://evil.test/x.png" } })).body.profileImageUrl, null, "foreign avatar URLs are ignored");
+
+        // cookie session: HttpOnly Set-Cookie on login, accepted instead of a Bearer header, cleared on logout
+        const login = await call("POST", "/api/auth/login", { body: { email: "member@example.test", password: "pw123456" } });
+        const setCookie = login.headers.get("set-cookie");
+        assert.ok(/tm_token=/.test(setCookie) && /HttpOnly/i.test(setCookie) && /SameSite=Lax/i.test(setCookie), "login sets an HttpOnly SameSite cookie");
+        const cookie = setCookie.split(";")[0];
+        assert.strictEqual((await call("GET", "/api/auth/profile", { cookie })).status, 200, "cookie authenticates");
+        assert.strictEqual((await call("GET", servedPath, { cookie })).status, 200, "cookie lets <img>/<a> reach files");
+        assert.ok(/tm_token=;/.test((await call("POST", "/api/auth/logout")).headers.get("set-cookie")), "logout clears the cookie");
+
+        // CORS: unknown origins get no permission headers; failed auth does not leak internals
+        const cors = await call("GET", "/api/auth/profile", { origin: "https://evil.test", token: M });
+        assert.strictEqual(cors.headers.get("access-control-allow-origin"), null, "no CORS grant for unlisted origins");
+        const bad = await call("GET", "/api/auth/profile", { token: "garbage" });
+        assert.strictEqual(bad.status, 401);
+        assert.strictEqual(bad.body.error, undefined, "token errors are not echoed");
+        pass("Files & Session Security", "files need auth + task access, nosniff/attachment, cookie session, CORS closed, no static /uploads");
 
         // ---------- 6. CALENDAR (the date-range query the month grid runs) ----------
         const weekStart = day(0).slice(0, 10);

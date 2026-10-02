@@ -1,17 +1,19 @@
 const jwt = require('jsonwebtoken');
 const User = require('../model/user.model.js')
 const { modulesFor } = require('../utils/scope.js');
+const { AUTH_COOKIE, readCookie } = require('../utils/cookies.js');
 
 
 const protect = async (req, res, next) => {
     try {
-        let token = req.headers.authorization;
+        const header = req.headers.authorization;
+        // Mobile sends a Bearer token; the web app relies on the HttpOnly cookie.
+        const token = header?.startsWith("Bearer ") ? header.split(" ")[1] : readCookie(req, AUTH_COOKIE);
 
-        if (!token || !token.startsWith("Bearer")) {
+        if (!token) {
             return res.status(401).json({ message: "Not authorized, no token" });
         }
 
-        token = token.split(" ")[1];
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const user = await User.findById(decoded.id).select("-password");
 
@@ -24,7 +26,7 @@ const protect = async (req, res, next) => {
         req.user = user;
         next();
     } catch (error) {
-        res.status(401).json({ message: "Not authorized, token failed", error: error.message });
+        res.status(401).json({ message: "Not authorized, token failed" });
     }
 }
 

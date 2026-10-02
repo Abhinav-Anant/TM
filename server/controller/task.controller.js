@@ -767,21 +767,6 @@ const deleteComment = async (req, res) => {
     }
 };
 
-// Turns uploaded files into public URLs the client appends to task.attachments.
-const uploadAttachments = (req, res) => {
-    if (!req.files || req.files.length === 0) {
-        return res.status(400).json({ message: "No files uploaded" });
-    }
-
-    const files = req.files.map((file) => ({
-        name: file.originalname,
-        size: file.size,
-        url: `${req.protocol}://${req.get("host")}/uploads/${file.filename}`,
-    }));
-
-    res.status(200).json({ files, urls: files.map((f) => f.url) });
-};
-
 const deleteTask = async (req, res) => {
     try {
         const task = await Task.findById(req.params.id);
@@ -802,7 +787,7 @@ module.exports = {
     getTasks, getTaskById, getCategories, getAnalytics,
     createTask, updateTask,
     updateTaskCheckList, updateTaskStatus, reviewTask,
-    addComment, deleteComment, uploadAttachments,
+    addComment, deleteComment,
     deleteTask,
     // exported for server/test.smoke.js
     buildFilters, buildSort, syncProgress, escapeRegex,

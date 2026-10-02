@@ -26,11 +26,7 @@ const UserProvider = ({ children }) => {
     useEffect(() => {
         if (user) return;
 
-        const accesstoken = localStorage.getItem("token");
-        if (!accesstoken) {
-            setLoading(false);
-            return
-        }
+        // The session lives in an HttpOnly cookie we cannot read: ask the server.
         fetchUser();
 
     }, [])
@@ -38,13 +34,11 @@ const UserProvider = ({ children }) => {
 
     const updatedUser = (userData) => {
         setUser(userData)
-        localStorage.setItem("token", userData.token);
         setLoading(false)
     }
 
     const clearUser = () => {
         setUser(null)
-        localStorage.removeItem("token")
     }
 
     return (

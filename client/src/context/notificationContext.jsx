@@ -108,7 +108,7 @@ const NotificationProvider = ({ children }) => {
 
             try {
                 const response = await fetch(`${BASE_URL}${API_PATHS.NOTIFICATIONS.STREAM}`, {
-                    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+                    credentials: "same-origin", // session cookie
                     signal: controller.signal,
                 });
 

@@ -5,16 +5,28 @@ const User = require("../model/user.model.js");
 const { normalizePhone } = require("../utils/phone.js");
 const { modulesFor } = require("../utils/scope.js");
 const { MIN_PASSWORD_LENGTH } = require("../utils/csv.js");
+const { setAuthCookie, clearAuthCookie } = require("../utils/cookies.js");
 
 // Generate JWT Token
 const generateToken = (userId) => {
     return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: "2d" });
 };
 
+// The web app lives on the HttpOnly cookie; the same token is returned in the
+// body for mobile, which has no cookie jar.
+const issueToken = (res, userId) => {
+    const token = generateToken(userId);
+    setAuthCookie(res, token);
+    return token;
+};
+
+// Only our own authenticated file URLs may be stored as an avatar.
+const isOwnFileUrl = (url) => /^\/api\/files\/[0-9a-f]{24}(\/[^/]+)?$/.test(url || "");
+
 // Register User
 const registerUser = async (req, res) => {
     try {
-        const { name, email, password, phone, profileImageUrl, adminInviteToken } = req.body;
+        const { name, email, password, phone, adminInviteToken } = req.body;
 
         // Check if user exists
         const userExist = await User.findOne({ email });
@@ -45,7 +57,6 @@ const registerUser = async (req, res) => {
             email,
             password: hashedPassword,
             phone: normalizePhone(phone),
-            profileImageUrl,
             role,
         });
 
@@ -58,7 +69,7 @@ const registerUser = async (req, res) => {
             modules: await modulesFor(user),
             phone: user.phone,
             profileImageUrl: user.profileImageUrl,
-            token: generateToken(user._id),
+            token: issueToken(res, user._id),
         });
     } catch (error) {
         console.error("Error while registering user:", error.message);
@@ -92,7 +103,7 @@ const loginUser = async (req, res) => {
             modules: await modulesFor(user),
             phone: user.phone,
             profileImageUrl: user.profileImageUrl,
-            token: generateToken(user._id)
+            token: issueToken(res, user._id)
         })
 
 
@@ -130,7 +141,7 @@ const updateUserProfile = async (req, res) => {
 
         if (name) user.name = name;
         if (email) user.email = email;
-        if (profileImageUrl) user.profileImageUrl = profileImageUrl;
+        if (isOwnFileUrl(profileImageUrl)) user.profileImageUrl = profileImageUrl;
 
         // Rejecting loudly matters here: silently discarding a typo'd number
         // would leave the member believing they are reachable on WhatsApp when
@@ -169,7 +180,7 @@ const updateUserProfile = async (req, res) => {
             modules: await modulesFor(user),
             phone: user.phone,
             profileImageUrl: user.profileImageUrl,
-            token:generateToken(user._id)
+            token: issueToken(res, user._id)
         });
     } catch (error) {
         console.error("Error while updating user profile:", error.message);
@@ -179,7 +190,14 @@ const updateUserProfile = async (req, res) => {
 
 
 
+// Logout
+const logoutUser = (req, res) => {
+    clearAuthCookie(res);
+    res.json({ message: "Logged out" });
+};
+
 module.exports = {
+    logoutUser,
     getUserProfile,
     registerUser,
     loginUser,

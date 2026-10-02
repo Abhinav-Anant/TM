@@ -23,7 +23,6 @@ const SignUp = () => {
   const handleSignUp = async (e) => {
     e.preventDefault();
 
-    let profileImageUrl = '';
 
     if (!fullName) {
       setError("Enter your full name.");
@@ -48,25 +47,27 @@ const SignUp = () => {
     setSubmitting(true);
 
     try {
-      if (profilePic) {
-        const imgUploadRes = await uploadImage(profilePic);
-        profileImageUrl = imgUploadRes.imageUrl || '';
-      }
-
       const response = await axiosInstance.post(API_PATHS.AUTH.REGISTER, {
         name: fullName,
         email,
         password,
-        profileImageUrl,
         adminInviteToken
       });
-      const { token, role } = response.data;
+      let account = response.data;
 
-      if (token) {
-        localStorage.setItem("token", token)
-        updatedUser(response.data)
+      // Uploads need a session, so the photo goes up after the account exists.
+      if (profilePic) {
+        try {
+          const { imageUrl } = await uploadImage(profilePic);
+          const updated = await axiosInstance.put(API_PATHS.AUTH.UPDATE_PROFILE, { profileImageUrl: imageUrl });
+          account = updated.data;
+        } catch {
+          /* the account is fine; they can add a photo from Profile */
+        }
       }
-      navigate(homeFor({ role }));
+
+      updatedUser(account);
+      navigate(homeFor({ role: account.role }));
     } catch (error) {
       if (error.response && error.response.data.message) {
         setError(error.response.data.message)

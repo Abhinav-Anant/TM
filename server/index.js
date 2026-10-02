@@ -17,11 +17,20 @@ const reportsRoutes = require('./routes/reports.route.js');
 const notificationRoutes = require('./routes/notification.route.js');
 const departmentRoutes = require('./routes/department.route.js');
 const leadRoutes = require('./routes/lead.route.js');
+const fileRoutes = require('./routes/file.route.js');
 
 const app = express();
 
+if (!process.env.JWT_SECRET) {
+    console.error("JWT_SECRET is not set - refusing to start.");
+    process.exit(1);
+}
+
 // Middleware
-app.use(cors());
+// The web app is served from this same origin, so CORS is only needed for other
+// origins (a separate dev server, a hosted client): list them in CORS_ORIGINS.
+const allowedOrigins = (process.env.CORS_ORIGINS || "").split(",").map((o) => o.trim()).filter(Boolean);
+app.use(cors({ origin: allowedOrigins, credentials: true }));
 
 app.use(express.json());
 
@@ -33,9 +42,9 @@ app.use('/api/reports', reportsRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/departments', departmentRoutes);
 app.use('/api/leads', leadRoutes);
+app.use('/api/files', fileRoutes);
 
-// Serve static files from "uploads" directory
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Uploads are NOT served statically: /api/files/:id checks who is asking.
 
 // Serve frontend (for Single Page App, e.g., React)
 app.use(express.static(path.join(__dirname, '../client/dist')));

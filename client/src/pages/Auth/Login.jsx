@@ -43,12 +43,8 @@ const Login = () => {
         password,
       });
 
-      const { token, role } = response.data;
       updatedUser(response.data)
-      if (token) {
-        localStorage.setItem("token", token);
-        navigate(homeFor({ role }));
-      }
+      navigate(homeFor({ role: response.data.role }));
     } catch (error) {
       if (error.response && error.response.data.message) {
         setError(error.response.data.message)

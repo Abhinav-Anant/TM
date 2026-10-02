@@ -2,12 +2,13 @@ const express = require("express");
 const router = express.Router();
 const { protect, adminOnly, allowRoles } = require('../middleware/authMiddleware.js');
 const { fileUpload } = require('../middleware/uploadMiddleware.js');
+const { uploadAttachments } = require('../controller/file.controller.js');
 const {
     getDashboardData, getUserDashboardData,
     getTasks, getTaskById, getCategories, getAnalytics,
     createTask, updateTask,
     updateTaskCheckList, updateTaskStatus, reviewTask,
-    addComment, deleteComment, uploadAttachments,
+    addComment, deleteComment,
     deleteTask,
 } = require('../controller/task.controller.js');
 

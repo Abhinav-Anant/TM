@@ -1,21 +1,8 @@
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
 
-// Must match the folder index.js serves at /uploads, regardless of the cwd the server was started from.
-const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
-fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, UPLOAD_DIR);
-    },
-    filename: (req, file, cb) => {
-        // Strip directory components so a crafted filename cannot escape the upload folder.
-        const safeName = path.basename(file.originalname).replace(/[^\w.\- ]/g, '_');
-        cb(null, `${Date.now()}-${safeName}`);
-    },
-});
+// Bytes are buffered, then handed to the storage driver (local disk or S3) by controller/file.controller.js.
+const storage = multer.memoryStorage();
 
 const makeFilter = (allowedTypes) => (req, file, cb) => {
     if (allowedTypes.includes(file.mimetype)) {
@@ -70,4 +57,3 @@ module.exports = upload;
 module.exports.upload = upload;
 module.exports.fileUpload = fileUpload;
 module.exports.csvUpload = csvUpload;
-module.exports.UPLOAD_DIR = UPLOAD_DIR;

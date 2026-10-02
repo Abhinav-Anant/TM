@@ -14,10 +14,7 @@ const axiosInstance = axios.create({
 // Request Interceptor
 axiosInstance.interceptors.request.use(
   (config) => {
-    const accessToken = localStorage.getItem("token");
-    if (accessToken) {
-      config.headers.Authorization = `Bearer ${accessToken}`;
-    }
+    // Auth rides on the HttpOnly session cookie; nothing to attach.
     return config;
   },
   (error) => {
@@ -35,7 +32,9 @@ axiosInstance.interceptors.response.use(
     if(error.response){
         // A 401 from the login call itself is a wrong password, not an expired
         // session: redirecting would reload the page and wipe the error message.
-        if (error.response.status === 401 && error.config?.url !== API_PATHS.AUTH.LOGIN) {
+        // The profile probe on page load is how the app learns it is signed out.
+        const isAuthProbe = [API_PATHS.AUTH.LOGIN, API_PATHS.AUTH.GET_PROFILE].includes(error.config?.url);
+        if (error.response.status === 401 && !isAuthProbe) {
             window.location.href = "/login";
           }else if(error.response.status===500){
             console.error("Server error, Please try again")
