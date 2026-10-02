@@ -41,6 +41,7 @@ const CalendarView = () => {
                         dueBefore: days[days.length - 1].format("YYYY-MM-DD"),
                         sortBy: "dueDate",
                         sortOrder: "asc",
+                        limit: 500,
                     },
                 });
                 setTasks(data?.tasks || []);

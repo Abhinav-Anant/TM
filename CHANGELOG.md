@@ -34,3 +34,10 @@
   completed, reopened, review, blocked, subtask). Lists omit it to stay light.
 - UI: tags, subtasks, blocked banner + picker, follow button, status select and timeline on the task page;
   tag filter and Blocked/Cancelled tabs on task lists; relaxed task form (only title + assignee required).
+
+### Pagination
+- `GET /api/tasks` pages in the database: `page`, `limit` (default 25, max 500) and a `pagination` block
+  `{page, limit, total, pages}`. Priority sorting is now done in the database too, with a stable `_id` tiebreak.
+  Added indexes for the common assignee/status/due and newest-first queries.
+- Task lists show 24 per page with a pager; the calendar asks for a whole month grid (limit 500); mobile asks for 100
+  until it gets infinite scroll.

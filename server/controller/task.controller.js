@@ -55,6 +55,14 @@ const buildFilters = (scope, query) => {
     return { base, filter };
 };
 
+const DEFAULT_PAGE_SIZE = 25;
+const MAX_PAGE_SIZE = 500; // the calendar asks for a whole month grid in one go
+
+const pageParams = (query) => ({
+    page: Math.max(1, parseInt(query.page, 10) || 1),
+    limit: Math.min(MAX_PAGE_SIZE, Math.max(1, parseInt(query.limit, 10) || DEFAULT_PAGE_SIZE)),
+});
+
 const buildSort = (query) => {
     const field = SORTABLE_FIELDS.includes(query.sortBy) ? query.sortBy : "createdAt";
     const order = query.sortOrder === "asc" ? 1 : -1;
@@ -294,15 +302,33 @@ const getTasks = async (req, res) => {
     try {
         const { base, filter } = buildFilters(await scopeFor(req.user), req.query);
 
-        let tasks = await Task.find(filter)
-            .sort(buildSort(req.query))
-            .select("-activity")
-            .populate("assignedTo", "name email profileImageUrl");
+        const { page, limit } = pageParams(req.query);
+        const skip = (page - 1) * limit;
 
-        // Mongo would sort the Low/Medium/High enum alphabetically - order it properly here.
+        let tasks;
         if (req.query.sortBy === "priority") {
-            const dir = req.query.sortOrder === "asc" ? -1 : 1;
-            tasks = tasks.sort((a, b) => dir * (PRIORITY_ORDER[b.priority] - PRIORITY_ORDER[a.priority]));
+            // Mongo would sort the priority enum alphabetically; rank it in the pipeline so
+            // paging stays in the database. _id breaks ties so pages never overlap.
+            const dir = req.query.sortOrder === "asc" ? 1 : -1;
+            const ranked = await Task.aggregate([
+                { $match: filter },
+                { $addFields: { _rank: { $switch: {
+                    branches: Object.entries(PRIORITY_ORDER).map(([name, rank]) => ({ case: { $eq: ["$priority", name] }, then: rank })),
+                    default: 0,
+                } } } },
+                { $sort: { _rank: dir, _id: 1 } },
+                { $skip: skip },
+                { $limit: limit },
+                { $project: { activity: 0, _rank: 0 } },
+            ]);
+            tasks = await Task.populate(ranked, { path: "assignedTo", select: "name email profileImageUrl" });
+        } else {
+            tasks = await Task.find(filter)
+                .sort({ ...buildSort(req.query), _id: 1 })
+                .skip(skip)
+                .limit(limit)
+                .select("-activity")
+                .populate("assignedTo", "name email profileImageUrl");
         }
 
         // Setting `status` per tab would overwrite a status the base filter excludes
@@ -322,8 +348,11 @@ const getTasks = async (req, res) => {
         ]);
 
         const waiting = await waitingForByTask(tasks);
+        // Total matching the current filters + status tab, so the pager knows how many pages exist.
+        const total = filter.status === undefined ? allTasks : await Task.countDocuments(filter);
 
         res.json({
+            pagination: { page, limit, total, pages: Math.max(1, Math.ceil(total / limit)) },
             tasks: tasks.map((task) => ({ ...withCompletedCount(task), waitingFor: waiting.get(String(task._id)) || [] })),
             statusSummary: { all: allTasks, pendingTasks, inProgressTasks, blockedTasks, inReviewTasks, completedTasks, cancelledTasks },
         });

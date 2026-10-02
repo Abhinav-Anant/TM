@@ -5,6 +5,8 @@ import { API_PATHS } from '../utils/apiPaths';
 import { EMPTY_FILTERS, toQueryParams } from '../components/TaskFilters';
 
 /** Shared task-list state (status tab + search/filter/sort) for the admin and member views. */
+const PAGE_SIZE = 24; // divisible by the 1/2/3-column card grids
+
 const useTaskList = () => {
     const [tasks, setTasks] = useState([]);
     const [tabs, setTabs] = useState([]);
@@ -13,15 +15,18 @@ const useTaskList = () => {
     const [status, setStatus] = useState("All");
     const [filters, setFilters] = useState({ ...EMPTY_FILTERS });
     const [loading, setLoading] = useState(true);
+    const [page, setPage] = useState(1);
+    const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
 
     const refresh = useCallback(async () => {
         setLoading(true);
         try {
             const { data } = await axiosInstance.get(API_PATHS.TASKS.GET_ALL_TASKS, {
-                params: toQueryParams(filters, status),
+                params: { ...toQueryParams(filters, status), page, limit: PAGE_SIZE },
             });
 
             setTasks(data?.tasks || []);
+            setPagination(data?.pagination || { page: 1, pages: 1, total: 0 });
 
             const summary = data?.statusSummary || {};
             setTabs([
@@ -39,9 +44,12 @@ const useTaskList = () => {
         } finally {
             setLoading(false);
         }
-    }, [filters, status]);
+    }, [filters, status, page]);
 
     useEffect(() => { refresh(); }, [refresh]);
+
+    // A new tab or filter is a new result set: start from its first page.
+    useEffect(() => { setPage(1); }, [filters, status]);
 
     useEffect(() => {
         axiosInstance
@@ -54,7 +62,7 @@ const useTaskList = () => {
             .catch(() => setTags([]));
     }, []);
 
-    return { tasks, tabs, categories, tags, status, setStatus, filters, setFilters, loading, refresh };
+    return { tasks, tabs, categories, tags, status, setStatus, filters, setFilters, loading, refresh, page, setPage, pagination };
 };
 
 export default useTaskList;

@@ -79,6 +79,7 @@ const TasksScreen = ({ navigation }) => {
                     priority: priority === 'Any' ? '' : priority,
                     category: category === 'All' ? '' : category,
                     search,
+                    limit: 100, // ponytail: no paging on mobile yet; infinite scroll in the mobile phase
                     sortBy: 'dueDate',
                     sortOrder: 'asc',
                 },

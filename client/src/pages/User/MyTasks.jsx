@@ -5,10 +5,11 @@ import TaskStatusTab from '../../components/layouts/TaskStatusTab';
 import TaskCard from '../../components/Cards/TaskCard';
 import TaskFilters from '../../components/TaskFilters';
 import useTaskList from '../../hooks/useTaskList';
+import Pager from '../../components/Pager';
 import { LuInbox } from 'react-icons/lu';
 
 const MyTasks = () => {
-  const { tasks, tabs, categories, tags, status, setStatus, filters, setFilters, loading } = useTaskList();
+  const { tasks, tabs, categories, tags, status, setStatus, filters, setFilters, loading, page, setPage, pagination } = useTaskList();
   const navigate = useNavigate();
 
   const handleClick = (taskId) => {
@@ -62,6 +63,8 @@ const MyTasks = () => {
             </p>
           </div>
         )}
+
+        <Pager page={page} pages={pagination.pages} total={pagination.total} onChange={setPage} />
       </div>
     </DashboardLayout>
   );

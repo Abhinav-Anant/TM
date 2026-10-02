@@ -1376,6 +1376,49 @@ const waitForServer = async () => {
         assert.strictEqual((await call("GET", "/api/tasks", { token: A })).body.tasks[0].activity, undefined, "lists stay light: no timeline");
         pass("Task model v2", "tags, optional due date, Urgent, subtasks, blocked-by (+409 guard, no loops), Cancelled, watchers, activity timeline");
 
+        // ---------- 5d. PAGINATION ----------
+        const everything = await call("GET", "/api/tasks?limit=500&sortBy=priority&sortOrder=desc", { token: A });
+        const totalTasks = everything.body.pagination.total;
+        assert.strictEqual(everything.body.tasks.length, totalTasks, "limit=500 returns the whole set when it fits");
+        assert.ok(totalTasks > 6, "enough tasks exist to page through");
+
+        const rank = { Urgent: 4, High: 3, Medium: 2, Low: 1 };
+        for (const sortBy of ["priority", "dueDate", "createdAt"]) {
+            const seen = [];
+            let pages = 0;
+            for (let page = 1; ; page += 1) {
+                const res = await call("GET", `/api/tasks?limit=4&page=${page}&sortBy=${sortBy}&sortOrder=desc`, { token: A });
+                assert.strictEqual(res.status, 200);
+                assert.ok(res.body.tasks.length <= 4, "a page never exceeds its limit");
+                assert.strictEqual(res.body.pagination.total, totalTasks);
+                seen.push(...res.body.tasks);
+                pages = res.body.pagination.pages;
+                if (page >= pages) break;
+            }
+            assert.strictEqual(pages, Math.ceil(totalTasks / 4), `${sortBy}: page count`);
+            assert.strictEqual(new Set(seen.map((t) => t._id)).size, totalTasks, `${sortBy}: every task appears exactly once across pages`);
+            if (sortBy === "priority") {
+                const ranks = seen.map((t) => rank[t.priority]);
+                assert.deepStrictEqual(ranks, [...ranks].sort((a, b) => b - a), "priority order holds across page boundaries");
+            }
+        }
+
+        const beyond = await call("GET", "/api/tasks?limit=4&page=999", { token: A });
+        assert.deepStrictEqual(beyond.body.tasks, [], "a page past the end is empty, not an error");
+        const capped = await call("GET", "/api/tasks?limit=99999", { token: A });
+        assert.strictEqual(capped.body.pagination.limit, 500, "limit is capped");
+        const junk = await call("GET", "/api/tasks?page=-3&limit=abc", { token: A });
+        assert.strictEqual(junk.body.pagination.page, 1);
+        assert.strictEqual(junk.body.pagination.limit, 25, "bad paging params fall back to defaults");
+
+        // a status tab pages over that tab only
+        const todoPage = await call("GET", "/api/tasks?status=To%20Do&limit=2", { token: A });
+        assert.strictEqual(todoPage.body.pagination.total, todoPage.body.statusSummary.pendingTasks, "tab total matches its tab count");
+        // members only page through their own tasks
+        const mine = await call("GET", "/api/tasks?limit=3", { token: O });
+        assert.ok(mine.body.pagination.total < totalTasks, "paging respects scope");
+        pass("Pagination", `${totalTasks} tasks paged stably by priority/due/created; capped, scoped, tab-aware`);
+
         console.log("\n  FEATURE VERIFICATION\n  " + "=".repeat(74));
         results.forEach((r) => console.log(`  [PASS] ${r.feature.padEnd(28)} ${r.detail}`));
         console.log("  " + "=".repeat(74));

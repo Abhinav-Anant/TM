@@ -8,12 +8,13 @@ import TaskStatusTab from '../../components/layouts/TaskStatusTab';
 import TaskCard from '../../components/Cards/TaskCard';
 import TaskFilters from '../../components/TaskFilters';
 import useTaskList from '../../hooks/useTaskList';
+import Pager from '../../components/Pager';
 import toast from 'react-hot-toast';
 import { UserContext } from '../../context/userContext';
 import { basePathFor } from '../../utils/roles';
 
 const ManageTasks = () => {
-  const { tasks, tabs, categories, tags, status, setStatus, filters, setFilters, loading } = useTaskList();
+  const { tasks, tabs, categories, tags, status, setStatus, filters, setFilters, loading, page, setPage, pagination } = useTaskList();
   const { user } = useContext(UserContext);
   const navigate = useNavigate();
   const base = basePathFor(user);
@@ -82,6 +83,8 @@ const ManageTasks = () => {
                 commentCount={item.comments?.length || 0}
                 completedTodoCount={item.completedTodoCount || 0}
                 todoChecklist={item.todoChecklist || []}
+                tags={item.tags}
+                waitingFor={item.waitingFor}
                 onClick={() => handleClick(item)}
               />
             ))}
@@ -101,6 +104,8 @@ const ManageTasks = () => {
             </button>
           </div>
         )}
+
+        <Pager page={page} pages={pagination.pages} total={pagination.total} onChange={setPage} />
       </div>
     </DashboardLayout>
   );

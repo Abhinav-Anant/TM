@@ -42,7 +42,7 @@ const SalesDashboard = () => {
         // also return everything overdue, putting the same task in both panels.
         const [pipe, sales] = await Promise.all([
           axiosInstance.get(API_PATHS.LEADS.GET_PIPELINE),
-          axiosInstance.get(API_PATHS.TASKS.GET_ALL_TASKS, { params: { category: 'Sales' } }),
+          axiosInstance.get(API_PATHS.TASKS.GET_ALL_TASKS, { params: { category: 'Sales', limit: 200 } }),
         ]);
 
         setPipeline(pipe.data);

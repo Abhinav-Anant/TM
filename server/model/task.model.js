@@ -77,7 +77,8 @@ const taskSchema = new mongoose.Schema({
 });
 
 taskSchema.index({ dueDate: 1, status: 1 });
-taskSchema.index({ assignedTo: 1 });
+taskSchema.index({ assignedTo: 1, status: 1, dueDate: 1 });
+taskSchema.index({ createdAt: -1 });
 taskSchema.index({ category: 1 });
 taskSchema.index({ tags: 1 });
 taskSchema.index({ watchers: 1 });

@@ -6,7 +6,9 @@
 - [x] Phase 2: task model (statuses, subtasks, dependencies, tags, watchers, activity)
 - [ ] Quick Add Task (Task / Assign / Due / Priority) - build with My Work in Phase 4
 - [ ] Mobile: show tags, subtasks, blocked state, timeline (Phase 8)
-- [ ] Task lists are not paginated yet (Phase 8 of the spec's performance section; do before Phase 4 dashboards)
+- [x] Task list pagination
+- [ ] Mobile: infinite scroll instead of limit=100 (Phase 8)
+- [ ] Dashboard endpoints still load all of a user's tasks into memory (getUserDashboardData) - move to aggregation in Phase 4
 - [ ] Phase 3: projects
 - [ ] Phase 4: My Work, dashboards, time tracking, reminders
 - [ ] Phase 5: Kanban, calendar, search, saved filters
