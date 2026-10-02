@@ -1572,7 +1572,7 @@ const waitForServer = async () => {
         assert.ok(mgr.totals.open >= 5 && mgr.totals.overdue >= 1 && "blocked" in mgr.totals && "inReview" in mgr.totals && "completedThisWeek" in mgr.totals, "company totals present");
         const p4_sorted = mgr.employees.map((e) => e.overdue);
         assert.deepStrictEqual(p4_sorted, [...p4_sorted].sort((a, b) => b - a), "most overdue first");
-        await mk({ title: "Head's team task", assignedTo: [pjMate._id], dueDate: day(-1) });
+        await mk({ title: "Head's team task", assignedTo: [pjMate._id], dueDate: day(-3) });
         const p4_headDash = (await call("GET", "/api/tasks/manager-dashboard", { token: PH })).body;
         assert.ok(p4_headDash.employees.some((e) => e._id === pjMate._id && e.open === 1 && e.overdue === 1), "a head sees their department");
         assert.ok(!p4_headDash.employees.some((e) => e._id === dan._id), "...and nobody outside it");
@@ -1629,6 +1629,87 @@ const waitForServer = async () => {
         assert.strictEqual((await call("PUT", `/api/tasks/${remNow._id}`, { token: A, body: { dueDate: null } })).status, 400, "cannot drop the due date while a reminder is set");
         assert.strictEqual((await call("PUT", `/api/tasks/${remNow._id}`, { token: A, body: { reminder: { type: "none" }, dueDate: null } })).status, 200, "...unless the reminder goes too");
         pass("Work & reminders", "My Work filters, employee + manager dashboards (scoped), self-created tasks, timers (atomic, one per person), reminders (once, re-armed)");
+
+        // ---------- 5g. SEARCH, CALENDAR FEED, SAVED FILTERS, BOARD ORDERING ----------
+        const p5_zebraProject = (await call("POST", "/api/projects", { token: A, body: { name: "Zebra Launch", dueDate: day(6), manager: member._id } })).body.project;
+        const p5_zebraTask = await mk({ title: "Zebra paperwork", tags: ["stripes"], dueDate: day(5) });
+
+        const p5_empty = (await call("GET", "/api/search?q=z", { token: A })).body;
+        assert.deepStrictEqual([p5_empty.tasks, p5_empty.projects, p5_empty.people, p5_empty.departments], [[], [], [], []], "one character is not a search");
+        const zebra = (await call("GET", "/api/search?q=zebra", { token: A })).body;
+        assert.ok(zebra.tasks.some((t) => t._id === p5_zebraTask._id), "finds tasks");
+        assert.ok(zebra.projects.some((p) => p._id === p5_zebraProject._id), "finds projects");
+        assert.ok((await call("GET", "/api/search?q=%23stripes", { token: A })).body.tasks.some((t) => t._id === p5_zebraTask._id), "finds by #tag");
+        assert.strictEqual((await call("GET", "/api/search?q=a.b(%5B", { token: A })).status, 200, "regex characters are literal, not an error");
+        const zebraOutsider = (await call("GET", "/api/search?q=zebra", { token: O })).body;
+        assert.deepStrictEqual([zebraOutsider.tasks.length, zebraOutsider.projects.length], [0, 0], "search never shows what you cannot open");
+        assert.ok((await call("GET", "/api/search?q=zebra", { token: M })).body.projects.length === 1, "...but does for the project's manager");
+        assert.strictEqual((await call("GET", "/api/search?q=zebra")).status, 401);
+
+        assert.ok((await call("GET", "/api/search?q=Mo%20Member", { token: A })).body.people.some((u) => u._id === member._id), "admin finds anyone");
+        assert.strictEqual((await call("GET", "/api/search?q=Mo%20Member", { token: O })).body.people.length, 0, "a stranger cannot enumerate colleagues");
+        assert.strictEqual((await call("GET", "/api/search?q=Otto", { token: O })).body.people.length, 1, "...but can find themselves");
+        assert.ok((await call("GET", "/api/search?q=Pia", { token: pjMate.token })).body.people.length === 1, "department colleagues are searchable");
+        assert.strictEqual((await call("GET", "/api/search?q=Dan%20Dash", { token: pjMate.token })).body.people.length, 0, "other departments are not");
+        assert.strictEqual((await call("GET", "/api/search?q=Projects%20A", { token: A })).body.departments.length, 1);
+        assert.strictEqual((await call("GET", "/api/search?q=Projects%20A", { token: pjMate.token })).body.departments.length, 1, "your own department");
+        assert.strictEqual((await call("GET", "/api/search?q=Projects%20A", { token: O })).body.departments.length, 0, "not someone else's");
+
+        // calendar feed
+        const winStart = day(0).slice(0, 10), winEnd = day(30).slice(0, 10);
+        assert.strictEqual((await call("GET", "/api/calendar?start=nope&end=nope", { token: A })).status, 400);
+        assert.strictEqual((await call("GET", `/api/calendar?start=${winEnd}&end=${winStart}`, { token: A })).status, 400, "end before start");
+        assert.strictEqual((await call("GET", `/api/calendar?start=${day(0)}&end=${day(200)}`, { token: A })).status, 400, "windows are capped");
+        const weekly = await mk({ title: "Weekly sales report", dueDate: day(1), recurrence: "weekly" });
+        const cal = (await call("GET", `/api/calendar?start=${winStart}&end=${winEnd}T23:59:59Z`, { token: A })).body;
+        assert.ok(cal.tasks.some((t) => t._id === p5_zebraTask._id), "calendar carries due tasks");
+        assert.ok(cal.projects.some((p) => p._id === p5_zebraProject._id), "...and project deadlines");
+        const repeats = cal.recurring.filter((r) => r.taskId === weekly._id);
+        assert.strictEqual(repeats.length, 4, "weekly task projects its next four occurrences in a 30-day window");
+        assert.ok(repeats.every((r) => new Date(r.dueDate) > new Date(weekly.dueDate)), "projections come after the real due date");
+        const calOutsider = (await call("GET", `/api/calendar?start=${winStart}&end=${winEnd}T23:59:59Z`, { token: O })).body;
+        assert.ok(!calOutsider.tasks.some((t) => t._id === p5_zebraTask._id) && !calOutsider.projects.some((p) => p._id === p5_zebraProject._id) && !calOutsider.recurring.some((r) => r.taskId === weekly._id), "calendar is scoped like everything else");
+        await call("PUT", `/api/tasks/${weekly._id}/status`, { token: A, body: { status: "Cancelled" } });
+        const calAfter = (await call("GET", `/api/calendar?start=${winStart}&end=${winEnd}T23:59:59Z`, { token: A })).body;
+        assert.strictEqual(calAfter.recurring.filter((r) => r.taskId === weekly._id).length, 0, "a cancelled series stops projecting");
+
+        // saved filters
+        const p5_user = await signUp({ name: "Fay Filter", email: "fay@example.test", password: "pw123456" });
+        const F = p5_user.token;
+        const savedOverdue = await call("POST", "/api/saved-filters", { token: F, body: { name: "My overdue", filters: { overdue: true, mine: true, priority: "High", evil: "x", tag: "" } } });
+        assert.strictEqual(savedOverdue.status, 201);
+        assert.deepStrictEqual(savedOverdue.body.filter.filters, { overdue: true, mine: true, priority: "High" }, "unknown keys and p5_empty values are dropped");
+        assert.strictEqual((await call("POST", "/api/saved-filters", { token: F, body: { name: "My overdue", filters: { priority: "Low" } } })).status, 409, "names are unique per person");
+        assert.strictEqual((await call("POST", "/api/saved-filters", { token: F, body: { name: " ", filters: { priority: "Low" } } })).status, 400);
+        assert.strictEqual((await call("POST", "/api/saved-filters", { token: F, body: { name: "Nothing", filters: {} } })).status, 400, "an p5_empty filter is not worth saving");
+        assert.strictEqual((await call("POST", "/api/saved-filters", { token: F, body: { name: "Junk", filters: { evil: "x" } } })).status, 400);
+        assert.strictEqual((await call("GET", "/api/saved-filters", { token: F })).body.filters.length, 1);
+        assert.strictEqual((await call("GET", "/api/saved-filters", { token: A })).body.filters.length, 0, "filters are private");
+        assert.strictEqual((await call("DELETE", `/api/saved-filters/${savedOverdue.body.filter._id}`, { token: A })).status, 404, "cannot delete someone else's");
+        assert.strictEqual((await call("GET", "/api/saved-filters")).status, 401);
+        for (let i = 0; i < 19; i += 1) {
+            assert.strictEqual((await call("POST", "/api/saved-filters", { token: F, body: { name: `Filter ${i}`, filters: { tag: `t${i}` } } })).status, 201);
+        }
+        assert.strictEqual((await call("POST", "/api/saved-filters", { token: F, body: { name: "One too many", filters: { tag: "x" } } })).status, 400, "capped at 20");
+        assert.strictEqual((await call("DELETE", `/api/saved-filters/${savedOverdue.body.filter._id}`, { token: F })).status, 200);
+        assert.strictEqual((await call("GET", "/api/saved-filters", { token: F })).body.filters.length, 19);
+
+        // board: a column is just "status=X", newest completions first
+        const p5_first = await mk({ title: "Board done first", dueDate: day(2) });
+        await call("PUT", `/api/tasks/${p5_first._id}/status`, { token: A, body: { status: "Completed" } });
+        await sleep(30);
+        const p5_second = await mk({ title: "Board done second", dueDate: day(2) });
+        await call("PUT", `/api/tasks/${p5_second._id}/status`, { token: A, body: { status: "Completed" } });
+        const column = (await call("GET", "/api/tasks?status=Completed&sortBy=completedAt&sortOrder=desc&limit=50", { token: A })).body;
+        const doneTitles = column.tasks.map((t) => t.title);
+        assert.ok(doneTitles.indexOf("Board done second") < doneTitles.indexOf("Board done first"), "Completed column lists the latest finish first");
+        assert.ok(column.tasks.every((t) => t.status === "Completed") && column.pagination.total >= 2, "a column only holds its own status");
+        // dragging a card is a status change; the rules still apply
+        const dragged = await mk({ title: "Drag me", dueDate: day(3) });
+        assert.strictEqual((await call("PUT", `/api/tasks/${dragged._id}/status`, { token: M, body: { status: "Blocked" } })).status, 200, "drag to Blocked");
+        assert.strictEqual((await call("PUT", `/api/tasks/${dragged._id}/status`, { token: M, body: { status: "In Review" } })).status, 400, "In Review is never a drop target; it comes from Completed");
+        assert.strictEqual((await call("PUT", `/api/tasks/${dragged._id}/status`, { token: O, body: { status: "In Progress" } })).status, 403, "and you cannot drag someone else's card");
+        pass("Search, calendar, saved filters, board", "scoped search over 4 kinds, calendar feed (tasks, project deadlines, projected repeats), private capped saved filters, board ordering + drag rules");
 
         console.log("\n  FEATURE VERIFICATION\n  " + "=".repeat(74));
         results.forEach((r) => console.log(`  [PASS] ${r.feature.padEnd(28)} ${r.detail}`));

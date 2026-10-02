@@ -60,7 +60,7 @@ const ManageTasks = () => {
           </div>
         </div>
 
-        {filters.assignee && (
+        {searchParams.get('assignee') && filters.assignee && (
           <p className="chip chip-signal mt-4">
             Showing tasks for {searchParams.get('name') || 'one person'}
             <button

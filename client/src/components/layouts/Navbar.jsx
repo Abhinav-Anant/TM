@@ -3,6 +3,7 @@ import { HiOutlineMenu, HiOutlineX } from 'react-icons/hi';
 import SideMenu from './SideMenu';
 import NotificationBell from './NotificationBell';
 import ThemeToggle from './ThemeToggle';
+import CommandPalette from '../CommandPalette';
 import { UserContext } from '../../context/userContext';
 
 const Navbar = ({ activeMenu }) => {
@@ -38,6 +39,7 @@ const Navbar = ({ activeMenu }) => {
             </div>
 
             <div className="ml-auto flex items-center gap-1">
+                {user && <CommandPalette />}
                 <ThemeToggle />
                 {user && <NotificationBell />}
             </div>

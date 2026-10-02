@@ -69,3 +69,16 @@
   (two clicks cannot both win); a forgotten timer logs at most 24h; time changes appear in the timeline.
 - **Reminders**: none / at due time / 1 hour before / 1 day before / custom, per task. Sent once, from any number of app instances
   (claim by conditional update); changing the due date or reminder re-arms it. Recurring copies inherit the reminder.
+
+### Phase 5 — Views
+- **Board** (`/board`): To Do / In Progress / Blocked / In Review / Completed, drag and drop (native HTML5, plus a "Move to" select on every
+  card for keyboard and touch). A drop is the normal status change, so the same rules apply (blocked tasks refuse to start, only the
+  assigned/permitted can move a card). In Review is never a drop target: drop on Completed and the server routes a task that needs sign-off
+  to In Review. Cards snap back with the server's message when a move is refused. Per-column "Show more"; Completed lists the latest finish first.
+- **Calendar**: Month / Week / Day views over one feed, `GET /api/calendar?start=&end=` (max 62 days): due tasks, project deadlines and
+  *projected* future occurrences of open recurring tasks (they do not exist as rows until the current one completes). Scoped like task lists.
+- **Global search** (Ctrl/Cmd+K or the navbar button): tasks, projects, people, departments (`GET /api/search?q=`), keyboard navigable.
+  Every kind is scoped: you only find what you could already open; members find only colleagues in their own departments.
+- **Saved filters**: name and keep any task-list filter (`/api/saved-filters`, private, max 20, only whitelisted keys stored).
+- Task filters grew Employee, Department, "Assigned to me" and due-date presets (overdue / today / this week / next 7 days) for admins and heads;
+  the board reuses the same filter bar.

@@ -40,4 +40,21 @@ const nextDueDate = (dueDate, recurrence, now = new Date()) => {
     return next;
 };
 
-module.exports = { RECURRENCES, nextDueDate };
+/**
+ * Every occurrence of the rule that falls in [from, to], after `dueDate` itself.
+ * Used to draw future repeats on the calendar before the copies exist.
+ * Bounded: at most `cap` results and 800 steps (daily over a 62-day window needs ~62).
+ */
+const occurrencesBetween = (dueDate, recurrence, from, to, cap = 60) => {
+    const step = STEPS[recurrence];
+    if (!step || !dueDate) return [];
+    const out = [];
+    for (let n = 1; n <= 800 && out.length < cap; n += 1) {
+        const date = step(dueDate, n);
+        if (date > to) break;
+        if (date >= from) out.push(date);
+    }
+    return out;
+};
+
+module.exports = { RECURRENCES, nextDueDate, occurrencesBetween };

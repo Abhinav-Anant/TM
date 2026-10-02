@@ -1,6 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { LuSearch, LuX, LuFilter } from 'react-icons/lu';
+import React, { useContext, useEffect, useState } from 'react';
+import moment from 'moment';
+import toast from 'react-hot-toast';
+import { LuSearch, LuX, LuFilter, LuBookmark } from 'react-icons/lu';
 import { PRIORITY_DATA, SORT_OPTIONS } from '../utils/data';
+import { UserContext } from '../context/userContext';
+import { canAssignTasks } from '../utils/roles';
+import axiosInstance from '../utils/axiosInstance';
+import { API_PATHS } from '../utils/apiPaths';
 
 export const EMPTY_FILTERS = {
     search: "",
@@ -9,6 +15,9 @@ export const EMPTY_FILTERS = {
     tag: "",
     project: "",
     assignee: "",
+    department: "",
+    duePreset: "",
+    mine: false,
     dueAfter: "",
     dueBefore: "",
     overdue: false,
@@ -16,6 +25,14 @@ export const EMPTY_FILTERS = {
 };
 
 const SEARCH_DEBOUNCE_MS = 350;
+
+const DUE_PRESETS = [
+    { value: "", label: "Any due date" },
+    { value: "overdue", label: "Overdue" },
+    { value: "today", label: "Due today" },
+    { value: "week", label: "Due this week" },
+    { value: "next7", label: "Next 7 days" },
+];
 
 const selectClass =
     "field py-2 cursor-pointer";
@@ -27,6 +44,20 @@ const selectClass =
 const TaskFilters = ({ filters, setFilters, categories = [], tags = [], projects = [] }) => {
     const [searchText, setSearchText] = useState(filters.search);
     const [expanded, setExpanded] = useState(false);
+    const { user } = useContext(UserContext);
+    const [people, setPeople] = useState([]);
+    const [departments, setDepartments] = useState([]);
+    const [saved, setSaved] = useState([]);
+    const [naming, setNaming] = useState(false);
+    const [saveName, setSaveName] = useState("");
+    const manager = canAssignTasks(user);
+
+    useEffect(() => {
+        axiosInstance.get(API_PATHS.SAVED_FILTERS.GET_ALL).then(({ data }) => setSaved(data.filters || [])).catch(() => {});
+        if (!manager) return;
+        axiosInstance.get(API_PATHS.USERS.GET_ALL_USERS).then(({ data }) => setPeople(data || [])).catch(() => {});
+        axiosInstance.get(API_PATHS.DEPARTMENTS.GET_ALL).then(({ data }) => setDepartments(data.departments || [])).catch(() => {});
+    }, [manager]);
 
     // Debounce typing so each keystroke is not a request.
     useEffect(() => {
@@ -51,6 +82,9 @@ const TaskFilters = ({ filters, setFilters, categories = [], tags = [], projects
         filters.tag,
         filters.project,
         filters.assignee,
+        filters.department,
+        filters.duePreset,
+        filters.mine ? "y" : "",
         filters.dueAfter,
         filters.dueBefore,
         filters.overdue ? "y" : "",
@@ -59,6 +93,29 @@ const TaskFilters = ({ filters, setFilters, categories = [], tags = [], projects
     const reset = () => {
         setSearchText("");
         setFilters({ ...EMPTY_FILTERS });
+    };
+
+    const saveCurrent = async (e) => {
+        e.preventDefault();
+        if (!saveName.trim()) return;
+        try {
+            const { data } = await axiosInstance.post(API_PATHS.SAVED_FILTERS.CREATE, { name: saveName, filters });
+            setSaved((prev) => [...prev, data.filter].sort((x, y) => x.name.localeCompare(y.name)));
+            setSaveName("");
+            setNaming(false);
+            toast.success("Filter saved");
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Could not save the filter.");
+        }
+    };
+
+    const removeSaved = async (id) => {
+        try {
+            await axiosInstance.delete(API_PATHS.SAVED_FILTERS.DELETE(id));
+            setSaved((prev) => prev.filter((f) => f._id !== id));
+        } catch {
+            toast.error("Could not delete the filter.");
+        }
     };
 
     const categoryOptions = categories.length
@@ -114,8 +171,40 @@ const TaskFilters = ({ filters, setFilters, categories = [], tags = [], projects
                 )}
             </div>
 
+            {(saved.length > 0 || activeCount > 0 || filters.search) && (
+                <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-white/8">
+                    <LuBookmark className="text-dusk" aria-hidden="true" />
+                    {saved.map((f) => (
+                        <span key={f._id} className="chip chip-mist gap-1.5">
+                            <button type="button" className="cursor-pointer hover:text-beam" onClick={() => { setSearchText(f.filters.search || ""); setFilters({ ...EMPTY_FILTERS, ...f.filters }); }}>
+                                {f.name}
+                            </button>
+                            <button type="button" className="cursor-pointer text-dusk hover:text-alert" aria-label={`Delete saved filter ${f.name}`} onClick={() => removeSaved(f._id)}>
+                                <LuX />
+                            </button>
+                        </span>
+                    ))}
+                    {naming ? (
+                        <form onSubmit={saveCurrent} className="flex items-center gap-2">
+                            <input
+                                className="field py-1.5 w-44" placeholder="Name this filter" aria-label="Saved filter name"
+                                value={saveName} onChange={(e) => setSaveName(e.target.value)} autoFocus maxLength={60}
+                            />
+                            <button type="submit" className="btn btn-sm btn-primary" disabled={!saveName.trim()}>Save</button>
+                            <button type="button" className="btn btn-sm" onClick={() => setNaming(false)}>Cancel</button>
+                        </form>
+                    ) : (
+                        (activeCount > 0 || filters.search) && (
+                            <button type="button" className="text-xs text-signal hover:underline cursor-pointer" onClick={() => setNaming(true)}>
+                                Save this filter
+                            </button>
+                        )
+                    )}
+                </div>
+            )}
+
             {expanded && (
-                <div className="enter-fade grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 mt-3 pt-3 border-t border-white/8">
+                <div className="enter-fade grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3 mt-3 pt-3 border-t border-white/8">
                     <label className="flex flex-col gap-1.5 text-xs font-medium text-mist">
                         Priority
                         <select
@@ -158,6 +247,33 @@ const TaskFilters = ({ filters, setFilters, categories = [], tags = [], projects
                         </select>
                     </label>
 
+                    {manager && (
+                        <label className="flex flex-col gap-1.5 text-xs font-medium text-mist">
+                            Employee
+                            <select className={selectClass} value={filters.assignee} onChange={(e) => update("assignee", e.target.value)}>
+                                <option value="">Everyone</option>
+                                {people.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}
+                            </select>
+                        </label>
+                    )}
+
+                    {manager && (
+                        <label className="flex flex-col gap-1.5 text-xs font-medium text-mist">
+                            Department
+                            <select className={selectClass} value={filters.department} onChange={(e) => update("department", e.target.value)}>
+                                <option value="">All departments</option>
+                                {departments.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
+                            </select>
+                        </label>
+                    )}
+
+                    <label className="flex flex-col gap-1.5 text-xs font-medium text-mist">
+                        Due
+                        <select className={selectClass} value={filters.duePreset} onChange={(e) => update("duePreset", e.target.value)}>
+                            {DUE_PRESETS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+                        </select>
+                    </label>
+
                     <label className="flex flex-col gap-1.5 text-xs font-medium text-mist">
                         Tag
                         <select
@@ -196,6 +312,16 @@ const TaskFilters = ({ filters, setFilters, categories = [], tags = [], projects
                         <input
                             type="checkbox"
                             className="w-4 h-4 rounded"
+                            checked={filters.mine}
+                            onChange={(e) => update("mine", e.target.checked)}
+                        />
+                        Assigned to me
+                    </label>
+
+                    <label className="flex items-end gap-2 text-sm text-mist pb-2.5 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            className="w-4 h-4 rounded"
                             checked={filters.overdue}
                             onChange={(e) => update("overdue", e.target.checked)}
                         />
@@ -205,6 +331,19 @@ const TaskFilters = ({ filters, setFilters, categories = [], tags = [], projects
             )}
         </div>
     );
+};
+
+/** "Due this week" etc. as concrete, still-open date ranges in the browser's local day. */
+const duePresetParams = (preset) => {
+    const start = moment().startOf("day");
+    const before = (m) => moment(m).subtract(1, "ms").toISOString();
+    switch (preset) {
+        case "overdue": return { open: "true", dueBefore: before(start) };
+        case "today": return { open: "true", dueAfter: start.toISOString(), dueBefore: before(moment(start).add(1, "day")) };
+        case "week": return { open: "true", dueAfter: moment().startOf("isoWeek").toISOString(), dueBefore: before(moment().endOf("isoWeek").add(1, "ms")) };
+        case "next7": return { open: "true", dueAfter: start.toISOString(), dueBefore: before(moment(start).add(7, "days")) };
+        default: return {};
+    }
 };
 
 /** Turns the filter state into the query params getTasks expects. */
@@ -218,8 +357,12 @@ export const toQueryParams = (filters, status) => {
         tag: filters.tag || "",
         project: filters.project || "",
         assignee: filters.assignee || "",
-        dueAfter: filters.dueAfter || "",
-        dueBefore: filters.dueBefore || "",
+        department: filters.department || "",
+        mine: filters.mine ? "true" : "",
+        ...duePresetParams(filters.duePreset),
+        // An explicit date range wins over a preset, so existing links keep working.
+        ...(filters.dueAfter ? { dueAfter: filters.dueAfter } : {}),
+        ...(filters.dueBefore ? { dueBefore: filters.dueBefore } : {}),
         overdue: filters.overdue ? "true" : "",
         sortBy,
         sortOrder,

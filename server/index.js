@@ -19,6 +19,9 @@ const departmentRoutes = require('./routes/department.route.js');
 const leadRoutes = require('./routes/lead.route.js');
 const fileRoutes = require('./routes/file.route.js');
 const projectRoutes = require('./routes/project.route.js');
+const searchRoutes = require('./routes/search.route.js');
+const calendarRoutes = require('./routes/calendar.route.js');
+const savedFilterRoutes = require('./routes/savedFilter.route.js');
 
 const app = express();
 
@@ -45,6 +48,9 @@ app.use('/api/departments', departmentRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/projects', projectRoutes);
+app.use('/api/search', searchRoutes);
+app.use('/api/calendar', calendarRoutes);
+app.use('/api/saved-filters', savedFilterRoutes);
 
 // Uploads are NOT served statically: /api/files/:id checks who is asking.
 

@@ -12,7 +12,10 @@
 - [ ] Project member/manager notifications ("you were added to...") - Phase 6 notification engine
 - [ ] Mobile: Projects tab (Phase 8)
 - [x] Phase 4: My Work, dashboards, time tracking, reminders, Quick Add
-- [ ] Phase 5: Kanban, calendar, search, saved filters
+- [x] Phase 5: Kanban, calendar, search, saved filters
+- [ ] Custom recurrence (spec item 21 lists Daily/Weekly/Monthly/Custom; only the first three exist)
+- [ ] Calendar: drag a task to a new day to reschedule (not in spec, skipped)
+- [ ] Mobile: Board and calendar views (Phase 8)
 - [ ] Phase 6: notification engine + preferences
 - [ ] Phase 7: reports + export
 - [ ] Phase 8: mobile

@@ -44,6 +44,13 @@ export const API_PATHS = {
         ADD_COMMENT: (taskId) => `/api/tasks/${taskId}/comments`, // Post a comment
         DELETE_COMMENT: (taskId, commentId) => `/api/tasks/${taskId}/comments/${commentId}`,
     },
+    SEARCH: "/api/search",                                 // ?q= tasks, projects, people, departments
+    CALENDAR: "/api/calendar",                             // ?start=&end= tasks, project deadlines, projected repeats
+    SAVED_FILTERS: {
+        GET_ALL: "/api/saved-filters",
+        CREATE: "/api/saved-filters",                      // { name, filters }
+        DELETE: (id) => `/api/saved-filters/${id}`,
+    },
     PROJECTS: {
         GET_ALL: "/api/projects",                          // Scoped list with dashboard stats
         CREATE: "/api/projects",                           // Admin / head

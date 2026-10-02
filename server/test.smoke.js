@@ -11,6 +11,28 @@ const { normalizePhone } = require("./utils/phone.js");
 const { parseMembersCsv } = require("./utils/csv.js");
 const { nextDueDate, RECURRENCES } = require("./utils/recurrence.js");
 
+// --- projected occurrences for the calendar --------------------------------
+{
+    const { occurrencesBetween } = require("./utils/recurrence.js");
+    const iso = (list) => list.map((d) => d.toISOString().slice(0, 10));
+    const from = new Date("2026-10-01T00:00:00Z");
+    const to = new Date("2026-10-31T00:00:00Z");
+
+    assert.deepStrictEqual(
+        iso(occurrencesBetween(new Date("2026-10-01T00:00:00Z"), "weekly", from, to)),
+        ["2026-10-08", "2026-10-15", "2026-10-22", "2026-10-29"],
+        "weekly repeats after the due date, inside the window");
+    assert.deepStrictEqual(
+        iso(occurrencesBetween(new Date("2026-01-31T00:00:00Z"), "monthly", new Date("2026-02-01T00:00:00Z"), new Date("2026-04-30T00:00:00Z"))),
+        ["2026-02-28", "2026-03-31", "2026-04-30"],
+        "monthly clamps to month end but does not drift (28 Feb, then 31 Mar)");
+    assert.strictEqual(occurrencesBetween(new Date("2026-10-01T00:00:00Z"), "daily", from, to).length, 30, "daily fills the window");
+    assert.strictEqual(occurrencesBetween(new Date("2026-10-01T00:00:00Z"), "daily", from, to, 5).length, 5, "capped");
+    assert.deepStrictEqual(occurrencesBetween(new Date("2026-10-01T00:00:00Z"), "none", from, to), [], "no rule, no repeats");
+    assert.deepStrictEqual(occurrencesBetween(null, "weekly", from, to), [], "no due date, no repeats");
+    assert.deepStrictEqual(occurrencesBetween(new Date("2026-12-01T00:00:00Z"), "weekly", from, to), [], "a series that starts after the window shows nothing");
+}
+
 // --- "today" in the caller's timezone, and reminders ----------------------
 {
     const { dayBounds, computeRemindAt, reminderError } = require("./utils/workTime.js");

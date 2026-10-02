@@ -12,7 +12,7 @@ const Department = require('../model/department.model.js');
 const { canViewProject } = require('../utils/projectScope.js');
 const { dayBounds, reminderError, computeRemindAt } = require('../utils/workTime.js');
 
-const SORTABLE_FIELDS = ["dueDate", "createdAt", "updatedAt", "priority", "progress", "title"];
+const SORTABLE_FIELDS = ["dueDate", "createdAt", "updatedAt", "completedAt", "priority", "progress", "title"];
 
 const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
