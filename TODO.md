@@ -9,7 +9,9 @@
 - [x] Task list pagination
 - [ ] Mobile: infinite scroll instead of limit=100 (Phase 8)
 - [ ] Dashboard endpoints still load all of a user's tasks into memory (getUserDashboardData) - move to aggregation in Phase 4
-- [ ] Phase 3: projects
+- [x] Phase 3: projects, project dashboard, project task filtering
+- [ ] Project member/manager notifications ("you were added to...") - Phase 6 notification engine
+- [ ] Mobile: Projects tab (Phase 8)
 - [ ] Phase 4: My Work, dashboards, time tracking, reminders
 - [ ] Phase 5: Kanban, calendar, search, saved filters
 - [ ] Phase 6: notification engine + preferences

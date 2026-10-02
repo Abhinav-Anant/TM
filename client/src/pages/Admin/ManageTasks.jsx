@@ -14,7 +14,7 @@ import { UserContext } from '../../context/userContext';
 import { basePathFor } from '../../utils/roles';
 
 const ManageTasks = () => {
-  const { tasks, tabs, categories, tags, status, setStatus, filters, setFilters, loading, page, setPage, pagination } = useTaskList();
+  const { tasks, tabs, categories, tags, projects, status, setStatus, filters, setFilters, loading, page, setPage, pagination } = useTaskList();
   const { user } = useContext(UserContext);
   const navigate = useNavigate();
   const base = basePathFor(user);
@@ -59,7 +59,7 @@ const ManageTasks = () => {
           </div>
         </div>
 
-        <TaskFilters filters={filters} setFilters={setFilters} categories={categories} tags={tags} />
+        <TaskFilters filters={filters} setFilters={setFilters} categories={categories} tags={tags} projects={projects} />
 
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mt-4">

@@ -1,7 +1,7 @@
 import {
   LuLayoutDashboard, LuClipboardCheck, LuSquarePlus, LuLogOut, LuUsers,
   LuCalendarDays, LuChartColumnBig, LuBuilding2, LuSmartphone,
-  LuTrendingUp, LuContact,
+  LuTrendingUp, LuContact, LuFolderKanban,
 } from 'react-icons/lu';
 
 export const SIDE_MENU_DATA = [
@@ -22,6 +22,12 @@ export const SIDE_MENU_DATA = [
     label: "Create Task",
     icon: LuSquarePlus,
     path: "/admin/create-task",
+  },
+  {
+    id: "03a",
+    label: "Projects",
+    icon: LuFolderKanban,
+    path: "/projects",
   },
   {
     id: "04",
@@ -81,6 +87,7 @@ export const SIDE_MENU_HEAD_DATA = [
   { id: "01", label: "Dashboard", icon: LuLayoutDashboard, path: "/head/dashboard" },
   { id: "02", label: "Manage Tasks", icon: LuClipboardCheck, path: "/head/tasks" },
   { id: "03", label: "Create Task", icon: LuSquarePlus, path: "/head/create-task" },
+  { id: "03a", label: "Projects", icon: LuFolderKanban, path: "/projects" },
   { id: "04", label: "Calendar", icon: LuCalendarDays, path: "/calendar" },
   { id: "05", label: "Analytics", icon: LuChartColumnBig, path: "/analytics" },
   { id: "05a", label: "Sales", icon: LuTrendingUp, path: "/sales", module: "sales" },
@@ -102,6 +109,12 @@ export const SIDE_MENU_USER_DATA = [
     label: "My Tasks",
     icon: LuClipboardCheck,
     path: "/user/tasks",
+  },
+  {
+    id: "02a",
+    label: "Projects",
+    icon: LuFolderKanban,
+    path: "/projects",
   },
   {
     id: "03",
@@ -162,6 +175,15 @@ export const STATUS_DATA = [
 // What a person may set by hand. Completed / In Review come from "Mark as done"
 // and the review flow, which know about sign-off.
 export const SETTABLE_STATUS_DATA = STATUS_DATA.filter((s) => ["To Do", "In Progress", "Blocked", "Cancelled"].includes(s.value));
+
+export const PROJECT_STATUS_DATA = ["Planning", "Active", "On Hold", "Completed", "Cancelled"].map((s) => ({ label: s, value: s }));
+
+export const projectStatusChip = (status) => ({
+  Planning: "chip-pending",
+  Active: "chip-active",
+  "On Hold": "chip-signal",
+  Completed: "chip-done",
+}[status] || "chip-mist");
 
 export const RECURRENCE_DATA = [
   { label: "Does not repeat", value: "none" },

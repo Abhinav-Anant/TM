@@ -1419,6 +1419,100 @@ const waitForServer = async () => {
         assert.ok(mine.body.pagination.total < totalTasks, "paging respects scope");
         pass("Pagination", `${totalTasks} tasks paged stably by priority/due/created; capped, scoped, tab-aware`);
 
+        // ---------- 5e. PROJECTS ----------
+        const mkProject = (token, body) => call("POST", "/api/projects", { token, body });
+        assert.strictEqual((await mkProject(A, {})).status, 400, "a project needs a name");
+        assert.strictEqual((await mkProject(A, { name: "X", status: "Done" })).status, 400, "unknown status refused");
+        assert.strictEqual((await mkProject(A, { name: "X", priority: "Meh" })).status, 400, "unknown priority refused");
+        assert.strictEqual((await mkProject(A, { name: "X", startDate: day(5), dueDate: day(1) })).status, 400, "due before start refused");
+        assert.strictEqual((await mkProject(A, { name: "X", manager: "not-an-id" })).status, 404, "unknown manager refused");
+        assert.strictEqual((await mkProject(M, { name: "Sneaky" })).status, 403, "members cannot create projects");
+        assert.strictEqual((await mkProject(undefined, { name: "Anon" })).status, 401);
+
+        const pjHead = await call("POST", "/api/auth/register", { body: { name: "Pia Head", email: "pia@example.test", password: "pw123456", adminInviteToken: HEAD_TOKEN } });
+        const PH = pjHead.body.token;
+        const pjDeptA = (await call("POST", "/api/departments", { token: A, body: { name: "Projects A" } })).body;
+        const pjDeptB = (await call("POST", "/api/departments", { token: A, body: { name: "Projects B" } })).body;
+        const pjDeptAId = pjDeptA._id || pjDeptA.department?._id;
+        const pjDeptBId = pjDeptB._id || pjDeptB.department?._id;
+        assert.ok(pjDeptAId && pjDeptBId, "departments created");
+        await call("POST", `/api/departments/${pjDeptAId}/members`, { token: A, body: { userId: pjHead.body._id, head: true } });
+        const pjMate = await signUp({ name: "Dee Mate", email: "dee@example.test", password: "pw123456" });
+        await call("POST", `/api/departments/${pjDeptAId}/members`, { token: A, body: { userId: pjMate._id } });
+
+        const site = await mkProject(A, { name: "Website Development", description: "New site", manager: member._id, members: [member._id], tags: ["#Web"], priority: "High", startDate: day(-5), dueDate: day(30) });
+        assert.strictEqual(site.status, 201);
+        const siteId = site.body.project._id;
+        assert.strictEqual(site.body.project.status, "Planning", "projects start in Planning");
+        assert.deepStrictEqual(site.body.project.tags, ["web"]);
+
+        // visibility
+        assert.strictEqual((await call("GET", `/api/projects/${siteId}`, { token: M })).status, 200, "the manager sees it");
+        assert.strictEqual((await call("GET", `/api/projects/${siteId}`, { token: O })).status, 404, "a stranger gets a 404, not a 403");
+        assert.ok(!(await call("GET", "/api/projects", { token: O })).body.projects.some((p) => p._id === siteId), "...and it is not in their list");
+
+        // a head runs their own department's projects only
+        const headProj = await mkProject(PH, { name: "Dept A rollout", department: pjDeptAId });
+        assert.strictEqual(headProj.status, 201, `head creates in own department: ${headProj.text}`);
+        assert.strictEqual((await mkProject(PH, { name: "Poach", department: pjDeptBId })).status, 403, "head cannot use another department");
+        const deptProjectId = headProj.body.project._id;
+        assert.strictEqual((await call("GET", `/api/projects/${deptProjectId}`, { token: pjMate.token })).status, 200, "department members see the department's projects");
+        assert.strictEqual((await call("GET", `/api/projects/${deptProjectId}`, { token: M })).status, 404, "other departments do not");
+        assert.strictEqual((await call("PUT", `/api/projects/${deptProjectId}`, { token: pjMate.token, body: { name: "Mine now" } })).status, 403, "viewing is not managing");
+        assert.strictEqual((await call("PUT", `/api/projects/${deptProjectId}`, { token: PH, body: { status: "Active" } })).status, 200, "the department head manages it");
+        assert.strictEqual((await call("PUT", `/api/projects/${deptProjectId}`, { token: PH, body: { department: pjDeptBId } })).status, 403, "head cannot hand it to a department they do not lead");
+        assert.strictEqual((await call("PUT", `/api/projects/${siteId}`, { token: M, body: { status: "Active", description: "Go" } })).status, 200, "the project manager edits");
+        assert.strictEqual((await call("PUT", `/api/projects/${siteId}`, { token: O, body: { name: "Hijack" } })).status, 404);
+
+        // tasks inside a project, with the dashboard numbers
+        const pjTask = (over) => mk({ project: siteId, ...over });
+        const t1 = await pjTask({ title: "Design homepage", status: "In Progress", dueDate: day(-1) });
+        const t2 = await pjTask({ title: "Develop homepage", status: "In Progress", dueDate: day(-3) });
+        const t3 = await pjTask({ title: "Test homepage", dueDate: day(20) });
+        const t4 = await pjTask({ title: "Publish homepage", dueDate: day(3) });
+        const t5 = await pjTask({ title: "Scrapped idea", dueDate: day(2) });
+        const t6 = await pjTask({ title: "Someday", dueDate: undefined });
+        assert.strictEqual(t1.project, siteId, "task keeps its project");
+        await call("PUT", `/api/tasks/${t3._id}/blocked-by`, { token: A, body: { blockedBy: [t2._id] } });
+        await call("PUT", `/api/tasks/${t1._id}/status`, { token: A, body: { status: "Completed" } });
+        await call("PUT", `/api/tasks/${t5._id}/status`, { token: A, body: { status: "Cancelled" } });
+
+        const dash = (await call("GET", `/api/projects/${siteId}`, { token: M })).body;
+        assert.deepStrictEqual(
+            { total: dash.stats.total, completed: dash.stats.completed, inProgress: dash.stats.inProgress, overdue: dash.stats.overdue, blocked: dash.stats.blocked, dueSoon: dash.stats.dueSoon, progress: dash.stats.progress },
+            { total: 5, completed: 1, inProgress: 1, overdue: 1, blocked: 1, dueSoon: 1, progress: 20 },
+            "project dashboard: cancelled ignored, blocked counts tasks waiting on open work, undated tasks are never overdue");
+        const projList = (await call("GET", "/api/projects", { token: A })).body;
+        assert.strictEqual(projList.projects.find((p) => p._id === siteId).stats.total, 5, "the list carries the same stats");
+        assert.strictEqual(projList.pagination.total, projList.projects.length);
+        assert.strictEqual((await call("GET", "/api/projects?status=Active&search=website", { token: A })).body.projects.length, 1, "filter by status + search");
+        assert.strictEqual((await call("GET", "/api/projects?status=Cancelled", { token: A })).body.projects.length, 0);
+        assert.strictEqual((await call("GET", `/api/projects/${deptProjectId}`, { token: PH })).body.stats.progress, 0, "an empty project is 0%, not a crash");
+
+        // project task filtering, scoped like every other task list
+        const inProject = await call("GET", `/api/tasks?project=${siteId}&limit=50`, { token: A });
+        assert.strictEqual(inProject.body.tasks.length, 6, "filter by project");
+        assert.ok(inProject.body.tasks.every((t) => t.project?.name === "Website Development"), "tasks carry the project name");
+        assert.strictEqual((await call("GET", `/api/tasks?project=${siteId}`, { token: O })).body.tasks.length, 0, "scope still applies inside a project");
+        assert.strictEqual((await call("GET", "/api/tasks?project=garbage", { token: A })).body.tasks.length, 0, "a malformed id matches nothing");
+        assert.strictEqual((await call("GET", `/api/tasks/${t4._id}`, { token: A })).body.project.name, "Website Development");
+
+        // linking tasks needs a project you can see
+        const strange = await call("POST", "/api/tasks", { token: PH, body: { title: "Cross-project", assignedTo: [pjMate._id], project: siteId } });
+        assert.strictEqual(strange.status, 404, "cannot file a task under a project you cannot see");
+        const pj_moved = await call("PUT", `/api/tasks/${t6._id}`, { token: A, body: { project: null, department: pjDeptAId } });
+        assert.strictEqual(pj_moved.body.updatedTask.project, null, "a task can leave its project");
+        assert.strictEqual(pj_moved.body.updatedTask.department, pjDeptAId, "and carry a department");
+        assert.strictEqual((await call("GET", `/api/tasks?department=${pjDeptAId}`, { token: A })).body.tasks.length, 1, "filter by department");
+        assert.strictEqual((await call("PUT", `/api/tasks/${t6._id}`, { token: A, body: { project: "nope" } })).status, 404);
+
+        // delete: admin only, tasks survive
+        assert.strictEqual((await call("DELETE", `/api/projects/${siteId}`, { token: M })).status, 403);
+        assert.strictEqual((await call("DELETE", `/api/projects/${siteId}`, { token: A })).status, 200);
+        assert.strictEqual((await call("GET", `/api/projects/${siteId}`, { token: A })).status, 404);
+        assert.strictEqual((await call("GET", `/api/tasks/${t4._id}`, { token: A })).body.project, null, "tasks outlive their project");
+        pass("Projects", "CRUD + validation, department visibility, head limits, dashboard stats, project/department task filters, delete keeps tasks");
+
         console.log("\n  FEATURE VERIFICATION\n  " + "=".repeat(74));
         results.forEach((r) => console.log(`  [PASS] ${r.feature.padEnd(28)} ${r.detail}`));
         console.log("  " + "=".repeat(74));

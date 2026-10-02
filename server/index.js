@@ -18,6 +18,7 @@ const notificationRoutes = require('./routes/notification.route.js');
 const departmentRoutes = require('./routes/department.route.js');
 const leadRoutes = require('./routes/lead.route.js');
 const fileRoutes = require('./routes/file.route.js');
+const projectRoutes = require('./routes/project.route.js');
 
 const app = express();
 
@@ -43,6 +44,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/departments', departmentRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/files', fileRoutes);
+app.use('/api/projects', projectRoutes);
 
 // Uploads are NOT served statically: /api/files/:id checks who is asking.
 

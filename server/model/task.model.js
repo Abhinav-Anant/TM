@@ -45,6 +45,8 @@ const taskSchema = new mongoose.Schema({
         enum: STATUSES,
         default: 'To Do'
     },
+    project: { type: mongoose.Schema.Types.ObjectId, ref: "Project", default: null },
+    department: { type: mongoose.Schema.Types.ObjectId, ref: "Department", default: null },
     startDate: { type: Date, default: null },
     dueDate: { type: Date, default: null },
     tags: { type: [String], default: [] },
@@ -81,6 +83,8 @@ taskSchema.index({ assignedTo: 1, status: 1, dueDate: 1 });
 taskSchema.index({ createdAt: -1 });
 taskSchema.index({ category: 1 });
 taskSchema.index({ tags: 1 });
+taskSchema.index({ project: 1, status: 1 });
+taskSchema.index({ department: 1 });
 taskSchema.index({ watchers: 1 });
 taskSchema.index({ blockedBy: 1 });
 

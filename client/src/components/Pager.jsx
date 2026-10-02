@@ -2,11 +2,11 @@ import React from 'react';
 import { LuChevronLeft, LuChevronRight } from 'react-icons/lu';
 
 /** Previous / next with a "page x of y" label. Renders nothing when everything fits on one page. */
-const Pager = ({ page, pages, total, onChange }) => {
+const Pager = ({ page, pages, total, onChange, noun = 'tasks' }) => {
     if (pages <= 1) return null;
     return (
         <nav className="flex items-center justify-between gap-3 mt-6" aria-label="Pagination">
-            <span className="text-xs text-dusk num">{total} tasks</span>
+            <span className="text-xs text-dusk num">{total} {noun}</span>
             <div className="flex items-center gap-2">
                 <button className="btn btn-sm" disabled={page <= 1} onClick={() => onChange(page - 1)}>
                     <LuChevronLeft /> Previous

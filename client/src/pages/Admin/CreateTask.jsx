@@ -19,7 +19,7 @@ import { basePathFor } from '../../utils/roles';
 const CreateTask = () => {
   const { user } = useContext(UserContext);
   const location = useLocation();
-  const { taskId } = location.state || {};
+  const { taskId, projectId } = location.state || {};
   const navigate = useNavigate();
 
   const [taskData, setTaskData] = useState({
@@ -28,6 +28,8 @@ const CreateTask = () => {
     priority: "Medium",
     status: "To Do",
     category: "General",
+    project: projectId || "",
+    department: "",
     startDate: null,
     dueDate: null,
     tagsText: "",
@@ -37,6 +39,15 @@ const CreateTask = () => {
     requiresReview: true,
     recurrence: "none",
   });
+  const [projects, setProjects] = useState([]);
+  const [departments, setDepartments] = useState([]);
+
+  useEffect(() => {
+    axiosInstance.get(API_PATHS.PROJECTS.GET_ALL, { params: { limit: 100 } })
+      .then(({ data }) => setProjects(data.projects || [])).catch(() => setProjects([]));
+    axiosInstance.get(API_PATHS.DEPARTMENTS.GET_ALL)
+      .then(({ data }) => setDepartments(data.departments || [])).catch(() => setDepartments([]));
+  }, []);
 
   const [currentTask, setCurrentTask] = useState(null);
   const [error, setError] = useState("");
@@ -54,6 +65,8 @@ const CreateTask = () => {
       priority: "Medium",
       status: "To Do",
       category: "General",
+      project: "",
+      department: "",
       startDate: null,
       dueDate: null,
       tagsText: "",
@@ -80,6 +93,8 @@ const CreateTask = () => {
       await axiosInstance.post(API_PATHS.TASKS.CREATE_TASK, {
         ...taskData,
         tags: tagsOf(),
+        project: taskData.project || null,
+        department: taskData.department || null,
         startDate: dateOf(taskData.startDate),
         dueDate: dateOf(taskData.dueDate),
         todoChecklist: todolist,
@@ -111,6 +126,8 @@ const CreateTask = () => {
       await axiosInstance.put(API_PATHS.TASKS.UPDATE_TASK(taskId), {
         ...taskData,
         tags: tagsOf(),
+        project: taskData.project || null,
+        department: taskData.department || null,
         startDate: dateOf(taskData.startDate),
         dueDate: dateOf(taskData.dueDate),
         todoChecklist: todolist,
@@ -155,6 +172,8 @@ const CreateTask = () => {
           description: response.data.description,
           priority: response.data.priority,
           status: response.data.status,
+          project: response.data.project?._id || "",
+          department: response.data.department?._id || "",
           category: response.data.category || 'General',
           startDate: response.data.startDate ? moment(response.data.startDate).format('YYYY-MM-DD') : null,
           dueDate: response.data.dueDate ? moment(response.data.dueDate).format('YYYY-MM-DD') : null,
@@ -334,6 +353,23 @@ const CreateTask = () => {
                   selectedUsers={taskData.assignedTo}
                   setSelectedUsers={(value) => handleValueChange("assignedTo", value)}
                 />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div>
+                <label className="field-label" htmlFor="task-project">Project</label>
+                <select id="task-project" className="field" value={taskData.project} onChange={({ target }) => handleValueChange("project", target.value)}>
+                  <option value="">No project</option>
+                  {projects.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="field-label" htmlFor="task-department">Department</label>
+                <select id="task-department" className="field" value={taskData.department} onChange={({ target }) => handleValueChange("department", target.value)}>
+                  <option value="">No department</option>
+                  {departments.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
+                </select>
               </div>
             </div>
 

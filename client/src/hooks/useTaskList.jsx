@@ -12,6 +12,7 @@ const useTaskList = () => {
     const [tabs, setTabs] = useState([]);
     const [categories, setCategories] = useState([]);
     const [tags, setTags] = useState([]);
+    const [projects, setProjects] = useState([]);
     const [status, setStatus] = useState("All");
     const [filters, setFilters] = useState({ ...EMPTY_FILTERS });
     const [loading, setLoading] = useState(true);
@@ -60,9 +61,13 @@ const useTaskList = () => {
             .get(API_PATHS.TASKS.GET_TAGS)
             .then(({ data }) => setTags(data?.tags || []))
             .catch(() => setTags([]));
+        axiosInstance
+            .get(API_PATHS.PROJECTS.GET_ALL, { params: { limit: 100 } })
+            .then(({ data }) => setProjects((data?.projects || []).map((p) => ({ _id: p._id, name: p.name }))))
+            .catch(() => setProjects([]));
     }, []);
 
-    return { tasks, tabs, categories, tags, status, setStatus, filters, setFilters, loading, refresh, page, setPage, pagination };
+    return { tasks, tabs, categories, tags, projects, status, setStatus, filters, setFilters, loading, refresh, page, setPage, pagination };
 };
 
 export default useTaskList;

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { API_PATHS } from '../../utils/apiPaths';
 import axiosInstance from '../../utils/axiosInstance';
 import DashboardLayout from '../../components/layouts/DashboardLayout';
@@ -122,6 +122,14 @@ const ViewTaskDetails = () => {
                 )}
               </div>
             </div>
+
+            {(task.project || task.department) && (
+              <p className="text-xs text-dusk mt-3">
+                {task.project && <>Project: <Link to={`/projects/${task.project._id}`} className="text-signal hover:underline">{task.project.name}</Link></>}
+                {task.project && task.department && ' · '}
+                {task.department && <>Department: {task.department.name}</>}
+              </p>
+            )}
 
             <WaitingBanner waitingFor={task.waitingFor} />
 

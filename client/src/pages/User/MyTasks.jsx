@@ -9,7 +9,7 @@ import Pager from '../../components/Pager';
 import { LuInbox } from 'react-icons/lu';
 
 const MyTasks = () => {
-  const { tasks, tabs, categories, tags, status, setStatus, filters, setFilters, loading, page, setPage, pagination } = useTaskList();
+  const { tasks, tabs, categories, tags, projects, status, setStatus, filters, setFilters, loading, page, setPage, pagination } = useTaskList();
   const navigate = useNavigate();
 
   const handleClick = (taskId) => {
@@ -24,7 +24,7 @@ const MyTasks = () => {
           <TaskStatusTab tabs={tabs} activeTab={status} setActiveTab={setStatus} />
         </div>
 
-        <TaskFilters filters={filters} setFilters={setFilters} categories={categories} tags={tags} />
+        <TaskFilters filters={filters} setFilters={setFilters} categories={categories} tags={tags} projects={projects} />
 
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mt-4">

@@ -7,6 +7,9 @@ const { RECURRENCES, nextDueDate } = require('../utils/recurrence.js');
 const { OPEN, STATUSES, PRIORITIES, PRIORITY_ORDER } = require('../utils/taskStatus.js');
 const { logActivity, logStatusChange } = require('../utils/activity.js');
 const { normalizeTags, openBlockers, waitingForByTask } = require('../utils/taskLinks.js');
+const Project = require('../model/project.model.js');
+const Department = require('../model/department.model.js');
+const { canViewProject } = require('../utils/projectScope.js');
 
 const SORTABLE_FIELDS = ["dueDate", "createdAt", "updatedAt", "priority", "progress", "title"];
 
@@ -21,12 +24,15 @@ const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
  * consistent with the other active filters.
  */
 const buildFilters = (scope, query) => {
-    const { status, priority, category, tag, search, dueBefore, dueAfter, overdue } = query;
+    const { status, priority, category, tag, project, department, search, dueBefore, dueAfter, overdue } = query;
     const base = { ...scope };
 
     if (priority && priority.trim()) base.priority = priority.trim();
     if (category && category.trim()) base.category = category.trim();
     if (tag && tag.trim()) base.tags = normalizeTags([tag])[0];
+    // A malformed id matches nothing rather than blowing up the cast.
+    if (project && project.trim()) base.project = mongoose.isValidObjectId(project) ? project : { $in: [] };
+    if (department && department.trim()) base.department = mongoose.isValidObjectId(department) ? department : { $in: [] };
 
     if ((dueBefore && dueBefore.trim()) || (dueAfter && dueAfter.trim())) {
         base.dueDate = {};
@@ -198,6 +204,21 @@ const afterStatusChange = async (task, previousStatus, actor) => {
     }
 };
 
+/**
+ * A task may only point at a project the caller can see and a department that exists.
+ * Returns { status, message } to refuse, or null. undefined/null/"" means "not setting / clearing".
+ */
+const checkLinks = async (user, { project, department }) => {
+    if (project) {
+        const found = mongoose.isValidObjectId(project) ? await Project.findById(project).select("_id") : null;
+        if (!found || !(await canViewProject(user, found))) return { status: 404, message: "Project not found" };
+    }
+    if (department && (!mongoose.isValidObjectId(department) || !(await Department.exists({ _id: department })))) {
+        return { status: 404, message: "Department not found" };
+    }
+    return null;
+};
+
 /** ", due Mon Jan 01 2026" or nothing, for tasks without a due date. */
 const dueText = (task) => (task.dueDate ? `, due ${new Date(task.dueDate).toDateString()}` : "");
 
@@ -321,14 +342,18 @@ const getTasks = async (req, res) => {
                 { $limit: limit },
                 { $project: { activity: 0, _rank: 0 } },
             ]);
-            tasks = await Task.populate(ranked, { path: "assignedTo", select: "name email profileImageUrl" });
+            tasks = await Task.populate(ranked, [
+                { path: "assignedTo", select: "name email profileImageUrl" },
+                { path: "project", select: "name" },
+            ]);
         } else {
             tasks = await Task.find(filter)
                 .sort({ ...buildSort(req.query), _id: 1 })
                 .skip(skip)
                 .limit(limit)
                 .select("-activity")
-                .populate("assignedTo", "name email profileImageUrl");
+                .populate("assignedTo", "name email profileImageUrl")
+                .populate("project", "name");
         }
 
         // Setting `status` per tab would overwrite a status the base filter excludes
@@ -467,7 +492,9 @@ const getTaskById = async (req, res) => {
             .populate("comments.user", "name email profileImageUrl")
             .populate("subtasks.assignee", "name email profileImageUrl")
             .populate("activity.user", "name profileImageUrl")
-            .populate("blockedBy", "title status");
+            .populate("blockedBy", "title status")
+            .populate("project", "name status")
+            .populate("department", "name");
 
         if (!task) {
             return res.status(404).json({ message: "Task not found" });
@@ -499,6 +526,7 @@ const createTask = async (req, res) => {
             title, description, priority, category,
             dueDate, assignedTo, attachments, todoChecklist,
             requiresReview, recurrence, startDate, tags, status,
+            project, department,
         } = req.body;
 
         if (!String(title || "").trim()) {
@@ -527,7 +555,12 @@ const createTask = async (req, res) => {
             return res.status(403).json({ message: "You can only assign tasks to members of your own department" });
         }
 
+        const link = await checkLinks(req.user, { project, department });
+        if (link) return res.status(link.status).json({ message: link.message });
+
         const task = await Task.create({
+            project: project || null,
+            department: department || null,
             title: title.trim(), description, priority, status,
             category: category || "General",
             startDate: startDate || null,
@@ -612,6 +645,16 @@ const updateTask = async (req, res) => {
                 return res.status(403).json({ message: "You can only assign tasks to members of your own department" });
             }
             task.assignedTo = body.assignedTo;
+        }
+
+        if ("project" in body || "department" in body) {
+            const link = await checkLinks(req.user, {
+                project: "project" in body ? body.project : undefined,
+                department: "department" in body ? body.department : undefined,
+            });
+            if (link) return res.status(link.status).json({ message: link.message });
+            if ("project" in body) task.project = body.project || null;
+            if ("department" in body) task.department = body.department || null;
         }
 
         // Timeline: one line per thing that actually changed.

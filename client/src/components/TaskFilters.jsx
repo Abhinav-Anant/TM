@@ -7,6 +7,7 @@ export const EMPTY_FILTERS = {
     priority: "",
     category: "",
     tag: "",
+    project: "",
     dueAfter: "",
     dueBefore: "",
     overdue: false,
@@ -22,7 +23,7 @@ const selectClass =
  * Search + advanced filter bar. Native <select> and <input type="date"> instead of
  * custom widgets - they are keyboard and screen-reader correct for free.
  */
-const TaskFilters = ({ filters, setFilters, categories = [], tags = [] }) => {
+const TaskFilters = ({ filters, setFilters, categories = [], tags = [], projects = [] }) => {
     const [searchText, setSearchText] = useState(filters.search);
     const [expanded, setExpanded] = useState(false);
 
@@ -47,6 +48,7 @@ const TaskFilters = ({ filters, setFilters, categories = [], tags = [] }) => {
         filters.priority,
         filters.category,
         filters.tag,
+        filters.project,
         filters.dueAfter,
         filters.dueBefore,
         filters.overdue ? "y" : "",
@@ -111,7 +113,7 @@ const TaskFilters = ({ filters, setFilters, categories = [], tags = [] }) => {
             </div>
 
             {expanded && (
-                <div className="enter-fade grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 mt-3 pt-3 border-t border-white/8">
+                <div className="enter-fade grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 mt-3 pt-3 border-t border-white/8">
                     <label className="flex flex-col gap-1.5 text-xs font-medium text-mist">
                         Priority
                         <select
@@ -136,6 +138,20 @@ const TaskFilters = ({ filters, setFilters, categories = [], tags = [] }) => {
                             <option value="">All categories</option>
                             {categoryOptions.map((c) => (
                                 <option key={c} value={c}>{c}</option>
+                            ))}
+                        </select>
+                    </label>
+
+                    <label className="flex flex-col gap-1.5 text-xs font-medium text-mist">
+                        Project
+                        <select
+                            className={selectClass}
+                            value={filters.project}
+                            onChange={(e) => update("project", e.target.value)}
+                        >
+                            <option value="">All projects</option>
+                            {projects.map((p) => (
+                                <option key={p._id} value={p._id}>{p.name}</option>
                             ))}
                         </select>
                     </label>
@@ -198,6 +214,7 @@ export const toQueryParams = (filters, status) => {
         priority: filters.priority || "",
         category: filters.category || "",
         tag: filters.tag || "",
+        project: filters.project || "",
         dueAfter: filters.dueAfter || "",
         dueBefore: filters.dueBefore || "",
         overdue: filters.overdue ? "true" : "",

@@ -39,6 +39,13 @@ export const API_PATHS = {
         ADD_COMMENT: (taskId) => `/api/tasks/${taskId}/comments`, // Post a comment
         DELETE_COMMENT: (taskId, commentId) => `/api/tasks/${taskId}/comments/${commentId}`,
     },
+    PROJECTS: {
+        GET_ALL: "/api/projects",                          // Scoped list with dashboard stats
+        CREATE: "/api/projects",                           // Admin / head
+        GET_BY_ID: (id) => `/api/projects/${id}`,          // Project + stats + canManage
+        UPDATE: (id) => `/api/projects/${id}`,             // Manager / creator / department head / admin
+        DELETE: (id) => `/api/projects/${id}`,             // Admin only; tasks are kept
+    },
     DEPARTMENTS: {
         GET_ALL: "/api/departments",                       // Admin: all · Head: own only
         CREATE: "/api/departments",                        // Admin only

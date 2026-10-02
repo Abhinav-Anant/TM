@@ -41,3 +41,16 @@
   Added indexes for the common assignee/status/due and newest-first queries.
 - Task lists show 24 per page with a pager; the calendar asks for a whole month grid (limit 500); mobile asks for 100
   until it gets infinite scroll.
+
+### Phase 3 — Projects
+- New `Project` (name, description, manager, department, members, start/due date, status Planning/Active/On Hold/Completed/Cancelled,
+  priority, tags, creator). `GET/POST /api/projects`, `GET/PUT/DELETE /api/projects/:id`.
+- Visibility: admins see all; everyone else sees projects they manage, belong to or created, plus every project of a department they
+  sit in (404 for the rest). Create: admin or head (a head only inside a department they lead). Edit: admin, manager, creator or the
+  department head. Delete: admin only; tasks are kept and simply leave the project.
+- Project dashboard numbers (total, completed, in progress, overdue, blocked, due soon, progress %) come from one aggregation shared by
+  the list and the detail view. Cancelled tasks are ignored; "blocked" is a Blocked status or an unfinished blocker; undated tasks are never overdue.
+- Tasks gain `project` and `department` (validated: a task can only join a project the caller can see). `GET /api/tasks?project=` and
+  `?department=` filter, scoped like every task list.
+- UI: Projects list (search, status filter, pager, progress cards), project page (stats, members, tasks with pager, edit, delete),
+  project/department pickers on the task form, project filter on task lists, project link on the task page, "Projects" in every menu.
