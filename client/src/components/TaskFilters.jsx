@@ -6,6 +6,7 @@ export const EMPTY_FILTERS = {
     search: "",
     priority: "",
     category: "",
+    tag: "",
     dueAfter: "",
     dueBefore: "",
     overdue: false,
@@ -21,7 +22,7 @@ const selectClass =
  * Search + advanced filter bar. Native <select> and <input type="date"> instead of
  * custom widgets - they are keyboard and screen-reader correct for free.
  */
-const TaskFilters = ({ filters, setFilters, categories = [] }) => {
+const TaskFilters = ({ filters, setFilters, categories = [], tags = [] }) => {
     const [searchText, setSearchText] = useState(filters.search);
     const [expanded, setExpanded] = useState(false);
 
@@ -45,6 +46,7 @@ const TaskFilters = ({ filters, setFilters, categories = [] }) => {
     const activeCount = [
         filters.priority,
         filters.category,
+        filters.tag,
         filters.dueAfter,
         filters.dueBefore,
         filters.overdue ? "y" : "",
@@ -109,7 +111,7 @@ const TaskFilters = ({ filters, setFilters, categories = [] }) => {
             </div>
 
             {expanded && (
-                <div className="enter-fade grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mt-3 pt-3 border-t border-white/8">
+                <div className="enter-fade grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 mt-3 pt-3 border-t border-white/8">
                     <label className="flex flex-col gap-1.5 text-xs font-medium text-mist">
                         Priority
                         <select
@@ -134,6 +136,20 @@ const TaskFilters = ({ filters, setFilters, categories = [] }) => {
                             <option value="">All categories</option>
                             {categoryOptions.map((c) => (
                                 <option key={c} value={c}>{c}</option>
+                            ))}
+                        </select>
+                    </label>
+
+                    <label className="flex flex-col gap-1.5 text-xs font-medium text-mist">
+                        Tag
+                        <select
+                            className={selectClass}
+                            value={filters.tag}
+                            onChange={(e) => update("tag", e.target.value)}
+                        >
+                            <option value="">All tags</option>
+                            {tags.map((t) => (
+                                <option key={t} value={t}>#{t}</option>
                             ))}
                         </select>
                     </label>
@@ -181,6 +197,7 @@ export const toQueryParams = (filters, status) => {
         search: filters.search || "",
         priority: filters.priority || "",
         category: filters.category || "",
+        tag: filters.tag || "",
         dueAfter: filters.dueAfter || "",
         dueBefore: filters.dueBefore || "",
         overdue: filters.overdue ? "true" : "",

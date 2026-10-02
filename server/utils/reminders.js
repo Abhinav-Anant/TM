@@ -1,4 +1,5 @@
 const Task = require('../model/task.model.js');
+const { OPEN } = require('./taskStatus.js');
 const Notification = require('../model/notification.model.js');
 const { notify } = require('./notify.js');
 const { departmentHeadsOf } = require('./scope.js');
@@ -27,7 +28,7 @@ const scanDeadlines = async () => {
     const soon = new Date(now.getTime() + WINDOW_HOURS * 60 * MINUTE);
 
     const tasks = await Task.find({
-        status: { $ne: "Completed" },
+        status: OPEN,
         dueDate: { $lte: soon },
     }).select("title dueDate assignedTo");
 
@@ -67,7 +68,7 @@ const scanDeadlines = async () => {
 const scanEscalations = async (now = new Date()) => {
     const cutoff = new Date(now.getTime() - ESCALATE_AFTER_DAYS * DAY);
     const windowStart = new Date(now.getTime() - (ESCALATE_AFTER_DAYS + ESCALATION_WINDOW_DAYS) * DAY);
-    const tasks = await Task.find({ status: { $ne: "Completed" }, dueDate: { $lt: cutoff, $gte: windowStart } })
+    const tasks = await Task.find({ status: OPEN, dueDate: { $lt: cutoff, $gte: windowStart } })
         .select("title dueDate assignedTo createdBy");
 
     let sentCount = 0;

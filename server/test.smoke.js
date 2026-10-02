@@ -28,8 +28,8 @@ assert.deepStrictEqual(
 
 // --- status is excluded from the count base so tab counts stay meaningful --
 {
-    const { base, filter } = buildFilters(member, { status: "Pending", priority: "High" });
-    assert.strictEqual(filter.status, "Pending");
+    const { base, filter } = buildFilters(member, { status: "To Do", priority: "High" });
+    assert.strictEqual(filter.status, "To Do");
     assert.strictEqual(base.status, undefined, "base must not carry status");
     assert.strictEqual(base.priority, "High", "base keeps the other filters");
 }
@@ -63,7 +63,7 @@ assert.strictEqual(escapeRegex("a+b(c)"), "a\\+b\\(c\\)");
 {
     const { filter } = buildFilters(admin, { overdue: "true" });
     assert.ok(filter.dueDate.$lt instanceof Date);
-    assert.deepStrictEqual(filter.status, { $ne: "Completed" });
+    assert.deepStrictEqual(filter.status, { $nin: ["Completed", "Cancelled"] });
 }
 {
     // "Overdue" means not-yet-done. Clicking the Completed tab must not silently
@@ -71,8 +71,8 @@ assert.strictEqual(escapeRegex("a+b(c)"), "a\\+b\\(c\\)");
     const { filter } = buildFilters(admin, { overdue: "true", status: "Completed" });
     assert.deepStrictEqual(filter.status, { $in: [] }, "contradictory status must match nothing");
 
-    const stillWorks = buildFilters(admin, { overdue: "true", status: "Pending" });
-    assert.strictEqual(stillWorks.filter.status, "Pending", "a compatible status still filters normally");
+    const stillWorks = buildFilters(admin, { overdue: "true", status: "To Do" });
+    assert.strictEqual(stillWorks.filter.status, "To Do", "a compatible status still filters normally");
 }
 
 // --- sorting: only whitelisted fields reach Mongo -------------------------
@@ -106,7 +106,7 @@ assert.deepStrictEqual(buildSort({}), { createdAt: -1 });
     // Un-ticking a completed task clears completedAt again.
     const task = { todoChecklist: [{ completed: false }], completedAt: new Date() };
     syncProgress(task);
-    assert.strictEqual(task.status, "Pending");
+    assert.strictEqual(task.status, "To Do");
     assert.strictEqual(task.completedAt, null);
 }
 {
@@ -114,7 +114,7 @@ assert.deepStrictEqual(buildSort({}), { createdAt: -1 });
     const task = { todoChecklist: [] };
     syncProgress(task);
     assert.strictEqual(task.progress, 0);
-    assert.strictEqual(task.status, "Pending");
+    assert.strictEqual(task.status, "To Do");
 }
 {
     // A task that needs sign-off stops at In Review, and is not stamped completed.

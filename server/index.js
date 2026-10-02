@@ -80,6 +80,8 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
     try {
         await connection;
+        // Task status "Pending" was renamed "To Do"; idempotent, so safe on every boot.
+        await require("./model/task.model.js").collection.updateMany({ status: "Pending" }, { $set: { status: "To Do" } });
         console.log(`Server is running on port ${PORT}`);
         console.log(`WhatsApp notifications: ${whatsappEnabled ? "enabled" : "disabled (set BLASTUP_URL / BLASTUP_API_KEY to enable)"}`);
         startReminders();

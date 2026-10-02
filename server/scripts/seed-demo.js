@@ -56,17 +56,17 @@ const DEPARTMENTS = ['Field Sales', 'Product Engineering', 'Support Operations']
 // trend chart and the analytics page all have something to draw.
 const TASKS = [
     { title: 'Close the Q3 renewal with Vantage Retail', dept: 'Field Sales', owner: 'Arjun Mehta', status: 'In Progress', priority: 'High', due: 3, category: 'Sales' },
-    { title: 'Prepare pricing sheet for enterprise tier', dept: 'Field Sales', owner: 'Neha Kulkarni', status: 'Pending', priority: 'Medium', due: 6, category: 'Sales' },
+    { title: 'Prepare pricing sheet for enterprise tier', dept: 'Field Sales', owner: 'Neha Kulkarni', status: 'To Do', priority: 'Medium', due: 6, category: 'Sales' },
     { title: 'Follow up on 12 inbound leads from the expo', dept: 'Field Sales', owner: 'Arjun Mehta', status: 'Completed', priority: 'Medium', due: -4, category: 'Sales' },
     { title: 'Draft the renewal deck for management review', dept: 'Field Sales', owner: 'Neha Kulkarni', status: 'In Progress', priority: 'Low', due: 9, category: 'Sales' },
 
     { title: 'Ship the notification service to production', dept: 'Product Engineering', owner: 'Ananya Rao', status: 'Completed', priority: 'High', due: -1, category: 'Development' },
     { title: 'Migrate the reporting job off the nightly cron', dept: 'Product Engineering', owner: 'Rohit Desai', status: 'In Progress', priority: 'High', due: 2, category: 'Development' },
-    { title: 'Add rate limiting to the public API', dept: 'Product Engineering', owner: 'Ananya Rao', status: 'Pending', priority: 'Medium', due: 8, category: 'Development' },
-    { title: 'Clear the dependency audit warnings', dept: 'Product Engineering', owner: 'Rohit Desai', status: 'Pending', priority: 'Low', due: 14, category: 'Development' },
+    { title: 'Add rate limiting to the public API', dept: 'Product Engineering', owner: 'Ananya Rao', status: 'To Do', priority: 'Medium', due: 8, category: 'Development' },
+    { title: 'Clear the dependency audit warnings', dept: 'Product Engineering', owner: 'Rohit Desai', status: 'To Do', priority: 'Low', due: 14, category: 'Development' },
     { title: 'Write the runbook for the new gateway', dept: 'Product Engineering', owner: 'Ananya Rao', status: 'In Progress', priority: 'Medium', due: 5, category: 'Documentation' },
 
-    { title: 'Renew the office insurance policy', dept: 'Support Operations', owner: 'Sameer Joshi', status: 'Pending', priority: 'High', due: 4, category: 'Operations' },
+    { title: 'Renew the office insurance policy', dept: 'Support Operations', owner: 'Sameer Joshi', status: 'To Do', priority: 'High', due: 4, category: 'Operations' },
     { title: 'Onboard the two new joiners for Monday', dept: 'Support Operations', owner: 'Sameer Joshi', status: 'In Progress', priority: 'Medium', due: 1, category: 'Operations' },
     { title: 'Reconcile the Q2 vendor invoices', dept: 'Support Operations', owner: 'Sameer Joshi', status: 'Completed', priority: 'Low', due: -7, category: 'Operations' },
 ];

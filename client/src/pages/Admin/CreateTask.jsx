@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import DashboardLayout from "../../components/layouts/DashboardLayout";
 import { API_PATHS } from '../../utils/apiPaths';
-import { PRIORITY_DATA, CATEGORY_DATA, RECURRENCE_DATA } from '../../utils/data';
+import { PRIORITY_DATA, CATEGORY_DATA, RECURRENCE_DATA, SETTABLE_STATUS_DATA } from '../../utils/data';
 import axiosInstance from '../../utils/axiosInstance';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { LuTrash2 } from 'react-icons/lu';
@@ -25,9 +25,12 @@ const CreateTask = () => {
   const [taskData, setTaskData] = useState({
     title: "",
     description: "",
-    priority: "Low",
+    priority: "Medium",
+    status: "To Do",
     category: "General",
+    startDate: null,
     dueDate: null,
+    tagsText: "",
     assignedTo: [],
     todoChecklist: [],
     attachments: [],
@@ -48,9 +51,12 @@ const CreateTask = () => {
     setTaskData({
       title: "",
       description: "",
-      priority: "Low",
+      priority: "Medium",
+      status: "To Do",
       category: "General",
+      startDate: null,
       dueDate: null,
+      tagsText: "",
       assignedTo: [],
       todoChecklist: [],
       attachments: [],
@@ -58,6 +64,10 @@ const CreateTask = () => {
       recurrence: "none",
     });
   };
+
+  // "#website, billing" -> ["website", "billing"]; the server normalises further.
+  const tagsOf = () => taskData.tagsText.split(/[,\s]+/).map((t) => t.trim()).filter(Boolean);
+  const dateOf = (value) => (value ? new Date(value).toISOString() : null);
 
   const createTask = async () => {
     setLoading(true);
@@ -69,7 +79,9 @@ const CreateTask = () => {
 
       await axiosInstance.post(API_PATHS.TASKS.CREATE_TASK, {
         ...taskData,
-        dueDate: new Date(taskData.dueDate).toISOString(),
+        tags: tagsOf(),
+        startDate: dateOf(taskData.startDate),
+        dueDate: dateOf(taskData.dueDate),
         todoChecklist: todolist,
       });
 
@@ -98,7 +110,9 @@ const CreateTask = () => {
 
       await axiosInstance.put(API_PATHS.TASKS.UPDATE_TASK(taskId), {
         ...taskData,
-        dueDate: new Date(taskData.dueDate).toISOString(),
+        tags: tagsOf(),
+        startDate: dateOf(taskData.startDate),
+        dueDate: dateOf(taskData.dueDate),
         todoChecklist: todolist,
       });
 
@@ -118,20 +132,12 @@ const CreateTask = () => {
       setError("Give the task a title.");
       return;
     }
-    if (!taskData.description.trim()) {
-      setError("Add a description so it is clear what to do.");
-      return;
-    }
-    if (!taskData.dueDate?.trim()) {
-      setError("Pick a due date.");
-      return;
-    }
     if (taskData.assignedTo?.length === 0) {
       setError("Assign this task to at least one person.");
       return;
     }
-    if (taskData.todoChecklist?.length === 0) {
-      setError("Add at least one checklist item.");
+    if (taskData.recurrence !== "none" && !taskData.dueDate) {
+      setError("A repeating task needs a due date.");
       return;
     }
 
@@ -148,8 +154,11 @@ const CreateTask = () => {
           title: response.data.title,
           description: response.data.description,
           priority: response.data.priority,
+          status: response.data.status,
           category: response.data.category || 'General',
+          startDate: response.data.startDate ? moment(response.data.startDate).format('YYYY-MM-DD') : null,
           dueDate: response.data.dueDate ? moment(response.data.dueDate).format('YYYY-MM-DD') : null,
+          tagsText: (response.data.tags || []).map((t) => `#${t}`).join(" "),
           assignedTo: response.data?.assignedTo?.map((item) => item?._id) || [],
           todoChecklist: response.data?.todoChecklist?.map((item) => item.text) || [],
           attachments: response.data?.attachments || [],
@@ -264,6 +273,30 @@ const CreateTask = () => {
                 />
               </div>
 
+              {!taskId && (
+                <div>
+                  <span id="task-status-label" className="field-label">Status</span>
+                  <SelectDropdown
+                    options={SETTABLE_STATUS_DATA.filter((s) => ["To Do", "In Progress"].includes(s.value))}
+                    value={taskData.status}
+                    onChange={(value) => handleValueChange("status", value)}
+                    placeholder="Select a status"
+                    labelledBy="task-status-label"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="field-label" htmlFor="task-start">Start date</label>
+                <input
+                  id="task-start"
+                  type="date"
+                  className="field"
+                  value={taskData.startDate || ''}
+                  onChange={({ target }) => handleValueChange("startDate", target.value)}
+                />
+              </div>
+
               <div>
                 <label className="field-label" htmlFor="task-due">Due date</label>
                 <input
@@ -302,6 +335,17 @@ const CreateTask = () => {
                   setSelectedUsers={(value) => handleValueChange("assignedTo", value)}
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="field-label" htmlFor="task-tags">Tags</label>
+              <input
+                id="task-tags"
+                className="field"
+                placeholder="#customer #billing"
+                value={taskData.tagsText}
+                onChange={({ target }) => handleValueChange("tagsText", target.value)}
+              />
             </div>
 
             <div>

@@ -8,7 +8,7 @@ import useTaskList from '../../hooks/useTaskList';
 import { LuInbox } from 'react-icons/lu';
 
 const MyTasks = () => {
-  const { tasks, tabs, categories, status, setStatus, filters, setFilters, loading } = useTaskList();
+  const { tasks, tabs, categories, tags, status, setStatus, filters, setFilters, loading } = useTaskList();
   const navigate = useNavigate();
 
   const handleClick = (taskId) => {
@@ -23,7 +23,7 @@ const MyTasks = () => {
           <TaskStatusTab tabs={tabs} activeTab={status} setActiveTab={setStatus} />
         </div>
 
-        <TaskFilters filters={filters} setFilters={setFilters} categories={categories} />
+        <TaskFilters filters={filters} setFilters={setFilters} categories={categories} tags={tags} />
 
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mt-4">
@@ -46,6 +46,8 @@ const MyTasks = () => {
                 attachmentCount={task.attachments?.length || 0}
                 commentCount={task.comments?.length || 0}
                 completedTodoCount={task.completedTodoCount || 0}
+                tags={task.tags}
+                waitingFor={task.waitingFor}
                 todoChecklist={task.todoChecklist || []}
                 onClick={() => handleClick(task._id)}
               />

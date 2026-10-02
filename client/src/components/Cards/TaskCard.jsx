@@ -2,7 +2,7 @@ import React from 'react';
 import moment from 'moment';
 import Progress from '../layouts/Progress';
 import AvatarGroup from '../layouts/AvatarGroup';
-import { LuPaperclip, LuMessageSquare, LuTriangleAlert, LuCalendar } from 'react-icons/lu';
+import { LuPaperclip, LuMessageSquare, LuTriangleAlert, LuCalendar, LuBan } from 'react-icons/lu';
 import { categoryColor, statusChip, priorityChip, statusFill } from '../../utils/data';
 import { tilt } from '../../utils/tilt';
 
@@ -13,11 +13,11 @@ const TaskCard = ({
     title, description, priority,
     status, category, progress,
     dueDate, assignedTo, attachmentCount, commentCount,
-    completedTodoCount, todoChecklist, onClick
+    completedTodoCount, todoChecklist, tags = [], waitingFor = [], onClick
 }) => {
     const formattedDueDate = dueDate ? moment(dueDate).format("D MMM YYYY") : 'No due date';
     const totalTodoChecklistLength = todoChecklist?.length || 0;
-    const isOverdue = status !== "Completed" && dueDate && moment(dueDate).isBefore(moment(), 'day');
+    const isOverdue = !["Completed", "Cancelled"].includes(status) && dueDate && moment(dueDate).isBefore(moment(), 'day');
 
     return (
         <article
@@ -49,6 +49,18 @@ const TaskCard = ({
                         <p className="text-sm text-mist mt-1.5 line-clamp-2 leading-relaxed">{description}</p>
                     )}
                 </div>
+
+                {waitingFor.length > 0 && (
+                    <p className="text-xs text-alert flex items-center gap-1.5">
+                        <LuBan className="shrink-0" /> Waiting for {waitingFor.join(", ")}
+                    </p>
+                )}
+
+                {tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                        {tags.slice(0, 4).map((tag) => <span key={tag} className="text-xs text-dusk">#{tag}</span>)}
+                    </div>
+                )}
 
                 <div className="mt-auto">
                     <div className="flex items-baseline justify-between text-xs mb-2">

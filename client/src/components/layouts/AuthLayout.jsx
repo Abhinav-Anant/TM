@@ -7,7 +7,7 @@ import ThemeToggle from './ThemeToggle';
  */
 const DECK = [
   { title: 'Q3 rollout plan', status: 'In Progress', tone: 'chip-active', progress: 68, depth: 0 },
-  { title: 'Vendor contract review', status: 'Pending', tone: 'chip-pending', progress: 20, depth: 1 },
+  { title: 'Vendor contract review', status: 'To Do', tone: 'chip-pending', progress: 20, depth: 1 },
   { title: 'Onboarding checklist', status: 'Completed', tone: 'chip-done', progress: 100, depth: 2 },
   { title: 'Server migration', status: 'Overdue', tone: 'chip-alert', progress: 45, depth: 3 },
 ];

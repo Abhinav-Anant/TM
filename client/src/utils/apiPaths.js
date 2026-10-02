@@ -23,6 +23,10 @@ export const API_PATHS = {
         GET_USER_DASHBOARD_DATA: "/api/tasks/user-dashboard-data", // Get User Dashboard Data
         GET_ANALYTICS: "/api/tasks/analytics", // Progress + completion analytics
         GET_CATEGORIES: "/api/tasks/categories", // Distinct categories in scope
+        GET_TAGS: "/api/tasks/tags", // Distinct tags in scope
+        WATCH: (taskId) => `/api/tasks/${taskId}/watch`, // { watching }
+        BLOCKED_BY: (taskId) => `/api/tasks/${taskId}/blocked-by`, // { blockedBy: [taskId] }
+        SUBTASKS: (taskId) => `/api/tasks/${taskId}/subtasks`, // POST; PUT/DELETE add /:subId
         GET_ALL_TASKS: "/api/tasks", // Get all tasks (Admin: all, User: only assigned)
         GET_TASK_BY_ID: (taskId) => `/api/tasks/${taskId}`, // Get task by ID
         CREATE_TASK: "/api/tasks", // Create a new task (Admin only)

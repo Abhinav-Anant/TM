@@ -42,7 +42,7 @@ const Dashboard = () => {
 
   const d = dashboardData || {};
   const pieData = [
-    { status: 'Pending', count: d.pendingTasksCount || 0 },
+    { status: 'To Do', count: d.pendingTasksCount || 0 },
     { status: 'In Progress', count: d.inProgressTasksCount || 0 },
     { status: 'In Review', count: d.inReviewTasksCount || 0 },
     { status: 'Completed', count: d.completedTasksCount || 0 },
@@ -70,7 +70,7 @@ const Dashboard = () => {
           <>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <InfoCard icon={<LuListChecks />} label="All tasks" value={d.allTasksCount || 0} color="bg-ice" tone="text-ice" />
-              <InfoCard icon={<LuClock />} label="Pending" value={d.pendingTasksCount || 0} color="bg-pending" tone="text-pending" />
+              <InfoCard icon={<LuClock />} label="To do" value={d.pendingTasksCount || 0} color="bg-pending" tone="text-pending" />
               <InfoCard icon={<LuLoaderCircle />} label="In progress" value={d.inProgressTasksCount || 0} color="bg-active" tone="text-active" />
               <InfoCard icon={<LuCircleCheck />} label="Completed" value={d.completedTasksCount || 0} color="bg-done" tone="text-done" />
             </div>

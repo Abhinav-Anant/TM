@@ -40,7 +40,7 @@ const UserCard = ({ userInfo }) => {
                 </div>
 
                 <div className="flex items-stretch gap-2 mt-4">
-                    <StatCell label="Pending" count={userInfo?.pendingTasks || 0} status="Pending" />
+                    <StatCell label="To do" count={userInfo?.pendingTasks || 0} status="To Do" />
                     <StatCell label="In progress" count={userInfo?.inProgressTasks || 0} status="In Progress" />
                     <StatCell label="Completed" count={userInfo?.completedTasks || 0} status="Completed" />
                 </div>

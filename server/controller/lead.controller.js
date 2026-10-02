@@ -1,4 +1,5 @@
 const Lead = require('../model/lead.model.js');
+const { OPEN } = require('../utils/taskStatus.js');
 const Task = require('../model/task.model.js');
 const { scopeFor, canAssignTo } = require('../utils/scope.js');
 const { normalizePhone } = require('../utils/phone.js');
@@ -57,7 +58,7 @@ const syncFollowUps = async ({ lead, actor, wasClosed }) => {
 
     if (isClosed) {
         await Task.updateMany(
-            { lead: lead._id, status: { $ne: "Completed" } },
+            { lead: lead._id, status: OPEN },
             { $set: { status: "Completed", completedAt: new Date(), progress: 100 } }
         );
         return null;
@@ -379,7 +380,7 @@ const logOutcome = async (req, res) => {
             // Closing the last open task without naming a successor would leave an
             // open lead with no next action; fall back to createFollowUp's default date.
             const needsOne = nextFollowUp
-                || !(await Task.exists({ lead: lead._id, status: { $ne: "Completed" } }));
+                || !(await Task.exists({ lead: lead._id, status: OPEN }));
             if (needsOne) {
                 nextTask = await createFollowUp({ lead, actor: req.user, dueDate: nextFollowUp, title: nextTitle });
             }

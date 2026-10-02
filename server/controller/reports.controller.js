@@ -83,7 +83,7 @@ const exportUsersReport = async (req, res) => {
                 task.assignedTo.forEach((assignedUser) => {
                     if (userTaskMap[assignedUser._id]) {
                         userTaskMap[assignedUser._id].taskCount += 1;
-                        if (task.status === "Pending") {
+                        if (task.status === "To Do") {
                             userTaskMap[assignedUser._id].pendingTasks += 1;
                         } else if (task.status === "In Progress") {
                             userTaskMap[assignedUser._id].inProgressTasks += 1;

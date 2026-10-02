@@ -7,7 +7,8 @@ import moment from 'moment'
 import AvatarGroup from '../../components/layouts/AvatarGroup';
 import Progress from '../../components/layouts/Progress';
 import TaskComments from '../../components/TaskComments';
-import { categoryColor, statusChip, priorityChip } from '../../utils/data';
+import { categoryColor, statusChip, priorityChip, SETTABLE_STATUS_DATA } from '../../utils/data';
+import { TagChips, WaitingBanner, WatchButton, Subtasks, BlockedBy, ActivityTimeline } from '../../components/TaskExtras';
 import { LuSquareArrowUpRight, LuTriangleAlert, LuCheck, LuRepeat } from 'react-icons/lu';
 import toast from 'react-hot-toast';
 
@@ -48,6 +49,16 @@ const ViewTaskDetails = () => {
     }
   };
 
+  // Hand-set statuses (not Completed / In Review - those have their own buttons).
+  const setStatus = async (status) => {
+    try {
+      await axiosInstance.put(API_PATHS.TASKS.UPDATE_TASK_STATUS(id), { status });
+      await getTaskDetailsById();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "That did not go through.");
+    }
+  };
+
   const getTaskDetailsById = async () => {
     try {
       const response = await axiosInstance.get(API_PATHS.TASKS.GET_TASK_BY_ID(id));
@@ -80,7 +91,7 @@ const ViewTaskDetails = () => {
     if (id) getTaskDetailsById()
   }, [id])
 
-  const isOverdue = task && task.status !== "Completed" && moment(task.dueDate).isBefore(moment(), 'day');
+  const isOverdue = task && task.dueDate && !["Completed", "Cancelled"].includes(task.status) && moment(task.dueDate).isBefore(moment(), 'day');
   const doneCount = (task?.todoChecklist || []).filter((t) => t.completed).length;
 
   if (!task) {
@@ -112,11 +123,15 @@ const ViewTaskDetails = () => {
               </div>
             </div>
 
+            <WaitingBanner waitingFor={task.waitingFor} />
+
             {task.description && (
               <p className="text-sm text-mist leading-relaxed mt-4 whitespace-pre-wrap">
                 {task.description}
               </p>
             )}
+
+            <div className="mt-4"><TagChips tags={task.tags} /></div>
 
             <div className="mt-8">
               <div className="flex items-baseline justify-between mb-3">
@@ -141,6 +156,8 @@ const ViewTaskDetails = () => {
               </ul>
             </div>
 
+            <Subtasks task={task} onChange={(subtasks) => setTask((prev) => ({ ...prev, subtasks }))} />
+
             {task.attachments?.length > 0 && (
               <div className="mt-8">
                 <h3 className="font-display text-sm text-beam mb-3">Attachments</h3>
@@ -151,6 +168,8 @@ const ViewTaskDetails = () => {
                 </div>
               </div>
             )}
+
+            <ActivityTimeline activity={task.activity} />
 
             <TaskComments
               taskId={id}
@@ -182,11 +201,30 @@ const ViewTaskDetails = () => {
           {task.status === "In Review" && !task.canReview && (
             <p className="text-sm text-signal">Submitted. Waiting for approval.</p>
           )}
-          {!["In Review", "Completed"].includes(task.status) && (
+          <WatchButton
+            taskId={id}
+            isWatching={task.isWatching}
+            onChange={(isWatching) => setTask((prev) => ({ ...prev, isWatching }))}
+          />
+          {!["In Review", "Completed", "Cancelled"].includes(task.status) && (
             <button className="btn btn-primary w-full" disabled={reviewing} onClick={finish}>
               {task.requiresReview && !task.canReview ? "Submit for review" : "Mark as done"}
             </button>
           )}
+
+          {["To Do", "In Progress", "Blocked", "Cancelled"].includes(task.status) && (
+            <div>
+              <label className="field-label mb-2 block" htmlFor="task-status">Status</label>
+              <select id="task-status" className="field py-2" value={task.status} onChange={(e) => setStatus(e.target.value)}>
+                {SETTABLE_STATUS_DATA.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            </div>
+          )}
+
+          <BlockedBy
+            task={task}
+            onChange={({ blockedBy, waitingFor }) => setTask((prev) => ({ ...prev, blockedBy, waitingFor }))}
+          />
 
           <div>
             <p className="field-label mb-2">Progress</p>

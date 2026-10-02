@@ -34,7 +34,7 @@ const UserDashboard = () => {
     const taskPriorityLevels = charts.taskPriorityLevels || {};
 
     setPieChartData([
-      { status: 'Pending', count: taskDistribution.Pending || 0 },
+      { status: 'To Do', count: taskDistribution.Pending || 0 },
       { status: 'In Progress', count: taskDistribution.InProgress || 0 },
       { status: 'In Review', count: taskDistribution.InReview || 0 },
       { status: 'Completed', count: taskDistribution.Completed || 0 },
@@ -85,7 +85,7 @@ const UserDashboard = () => {
           />
           <InfoCard
             icon={<LuClock />}
-            label="Pending"
+            label="To do"
             value={addThousandsSeparator(taskDistribution.Pending || 0)}
             color="bg-pending"
             tone="text-pending"

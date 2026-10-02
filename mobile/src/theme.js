@@ -9,14 +9,17 @@ export const colors = {
 };
 
 export const STATUS_COLOR = {
-    Pending: '#8D51FF',
+    'To Do': '#8D51FF',
+    Blocked: '#E11D48',
+    Cancelled: '#6B7280',
     'In Progress': '#00B8DB',
     'In Review': '#FFB020',
     Completed: '#65A30D',
 };
 
 export const PRIORITY_COLOR = {
-    High: '#E11D48',
+    Urgent: '#E11D48',
+    High: '#F97316',
     Medium: '#F59E0B',
     Low: '#10B981',
 };
@@ -25,4 +28,4 @@ export const formatDate = (value) =>
     value ? new Date(value).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A';
 
 export const isOverdue = (task) =>
-    task?.status !== 'Completed' && task?.dueDate && new Date(task.dueDate) < new Date(new Date().toDateString());
+    !['Completed', 'Cancelled'].includes(task?.status) && task?.dueDate && new Date(task.dueDate) < new Date(new Date().toDateString());

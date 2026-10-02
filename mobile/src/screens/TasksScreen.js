@@ -6,8 +6,8 @@ import {
 import api, { API_PATHS } from '../api';
 import { colors, STATUS_COLOR, PRIORITY_COLOR, formatDate, isOverdue } from '../theme';
 
-const STATUS_TABS = ['All', 'Pending', 'In Progress', 'In Review', 'Completed'];
-const PRIORITIES = ['Any', 'High', 'Medium', 'Low'];
+const STATUS_TABS = ['All', 'To Do', 'In Progress', 'Blocked', 'In Review', 'Completed', 'Cancelled'];
+const PRIORITIES = ['Any', 'Urgent', 'High', 'Medium', 'Low'];
 const SEARCH_DEBOUNCE_MS = 350;
 
 const Chip = ({ label, active, onPress, color }) => (

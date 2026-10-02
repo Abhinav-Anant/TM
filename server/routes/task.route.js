@@ -2,6 +2,9 @@ const express = require("express");
 const router = express.Router();
 const { protect, adminOnly, allowRoles } = require('../middleware/authMiddleware.js');
 const { fileUpload } = require('../middleware/uploadMiddleware.js');
+const {
+    getTags, setWatching, setBlockedBy, addSubtask, updateSubtask, deleteSubtask,
+} = require('../controller/taskExtras.controller.js');
 const { uploadAttachments } = require('../controller/file.controller.js');
 const {
     getDashboardData, getUserDashboardData,
@@ -17,6 +20,7 @@ router.get('/dashboard-data', protect, getDashboardData);
 router.get('/user-dashboard-data', protect, getUserDashboardData);
 router.get('/analytics', protect, getAnalytics);
 router.get('/categories', protect, getCategories);
+router.get('/tags', protect, getTags);
 router.post('/upload', protect, fileUpload.array('files', 5), uploadAttachments);
 
 router.get('/', protect, getTasks);
@@ -28,6 +32,12 @@ router.put('/:id/todo', protect, updateTaskCheckList);
 router.put('/:id/status', protect, updateTaskStatus);
 router.put('/:id/review', protect, reviewTask);
 router.delete('/:id', protect, adminOnly, deleteTask);
+
+router.put('/:id/watch', protect, setWatching);
+router.put('/:id/blocked-by', protect, setBlockedBy);
+router.post('/:id/subtasks', protect, addSubtask);
+router.put('/:id/subtasks/:subId', protect, updateSubtask);
+router.delete('/:id/subtasks/:subId', protect, deleteSubtask);
 
 router.post('/:id/comments', protect, addComment);
 router.delete('/:id/comments/:commentId', protect, deleteComment);

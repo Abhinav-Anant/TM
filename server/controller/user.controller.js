@@ -27,7 +27,7 @@ const getUser = async (req, res) => {
 
         const usersWithTaskCounts = [];
         for (const user of users) {
-            const pendingTasks = await Task.countDocuments({ assignedTo: user._id, status: "Pending" });
+            const pendingTasks = await Task.countDocuments({ assignedTo: user._id, status: "To Do" });
             const inProgressTasks = await Task.countDocuments({ assignedTo: user._id, status: "In Progress" });
             const completedTasks = await Task.countDocuments({ assignedTo: user._id, status: "Completed" });
 

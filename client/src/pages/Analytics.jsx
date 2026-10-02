@@ -69,7 +69,7 @@ const Analytics = () => {
 
     // Server groups byStatus alphabetically by _id, not in the fixed status order
     // the chart colours are indexed by - reorder before handing it to the pie.
-    const STATUS_ORDER = ["Pending", "In Progress", "In Review", "Completed"];
+    const STATUS_ORDER = ["To Do", "In Progress", "In Review", "Completed", "Blocked", "Cancelled"];
     const byStatusCounts = Object.fromEntries((data?.byStatus || []).map((g) => [g.status, g.count]));
     const byStatus = STATUS_ORDER
         .filter((status) => byStatusCounts[status] !== undefined)

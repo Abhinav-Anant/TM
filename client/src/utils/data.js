@@ -146,15 +146,22 @@ export const SIDE_MENU_USER_DATA = [
 export const PRIORITY_DATA = [
   { label: "Low", value: "Low" },
   { label: "Medium", value: "Medium" },
-  { label: "High", value: "High" }
+  { label: "High", value: "High" },
+  { label: "Urgent", value: "Urgent" }
 ];
 
 export const STATUS_DATA = [
-  { label: "Pending", value: "Pending" },
+  { label: "To Do", value: "To Do" },
   { label: "In Progress", value: "In Progress" },
+  { label: "Blocked", value: "Blocked" },
   { label: "In Review", value: "In Review" },
-  { label: "Completed", value: "Completed" }
+  { label: "Completed", value: "Completed" },
+  { label: "Cancelled", value: "Cancelled" }
 ];
+
+// What a person may set by hand. Completed / In Review come from "Mark as done"
+// and the review flow, which know about sign-off.
+export const SETTABLE_STATUS_DATA = STATUS_DATA.filter((s) => ["To Do", "In Progress", "Blocked", "Cancelled"].includes(s.value));
 
 export const RECURRENCE_DATA = [
   { label: "Does not repeat", value: "none" },
@@ -211,12 +218,14 @@ export const statusChip = (status) => ({
   "In Progress": "chip-active",
   "In Review": "chip-signal",
   Completed: "chip-done",
-  Pending: "chip-pending",
+  "To Do": "chip-pending",
+  Blocked: "chip-alert",
 }[status] || "chip-mist");
 
 export const priorityChip = (priority) => ({
-  High: "chip-alert",
-  Medium: "chip-signal",
+  Urgent: "chip-alert",
+  High: "chip-signal",
+  Medium: "chip-active",
   Low: "chip-done",
 }[priority] || "chip-mist");
 
@@ -225,7 +234,8 @@ export const statusFill = (status) => ({
   "In Progress": "bg-active",
   "In Review": "bg-signal",
   Completed: "bg-done",
-  Pending: "bg-pending",
+  "To Do": "bg-pending",
+  Blocked: "bg-alert",
 }[status] || "bg-mist");
 
 /** Matching text colour, for anything that glows in its own hue (currentColor). */
@@ -233,12 +243,14 @@ export const statusText = (status) => ({
   "In Progress": "text-active",
   "In Review": "text-signal",
   Completed: "text-done",
-  Pending: "text-pending",
+  "To Do": "text-pending",
+  Blocked: "text-alert",
 }[status] || "text-mist");
 
 export const priorityFill = (priority) => ({
-  High: "bg-alert",
-  Medium: "bg-signal",
+  Urgent: "bg-alert",
+  High: "bg-signal",
+  Medium: "bg-active",
   Low: "bg-done",
 }[priority] || "bg-mist");
 
@@ -249,8 +261,9 @@ export const priorityFill = (priority) => ({
  * (worst adjacent CVD dE 13.7); priority sits in the 6-8 CVD floor band at 7.9,
  * which holds because every bar is labelled on the x-axis.
  */
-export const STATUS_CHART_COLORS = ["#8b5cf6", "#0369a1", "#ffb020", "#059669"];
-export const PRIORITY_CHART_COLORS = { Low: "#059669", Medium: "#d97706", High: "#e11d48" };
+// Order matters: index 0-3 are To Do / In Progress / In Review / Completed; 4-5 are Blocked / Cancelled.
+export const STATUS_CHART_COLORS = ["#8b5cf6", "#0369a1", "#ffb020", "#059669", "#e11d48", "#64748b"];
+export const PRIORITY_CHART_COLORS = { Low: "#059669", Medium: "#0369a1", High: "#d97706", Urgent: "#e11d48" };
 
 /** Chart chrome, so axes and grids stay recessive against the panel. */
 export const CHART_INK = {

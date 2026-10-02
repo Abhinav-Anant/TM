@@ -288,7 +288,7 @@ const waitForServer = async () => {
         assert.strictEqual(overdueOnly.body.tasks.length, 1);
         assert.strictEqual(overdueOnly.body.tasks[0]._id, overdue._id);
 
-        const byStatus = await call("GET", "/api/tasks?status=Pending", { token: A });
+        const byStatus = await call("GET", "/api/tasks?status=To%20Do", { token: A });
         assert.strictEqual(byStatus.body.tasks.length, 4);
         assert.strictEqual(byStatus.body.statusSummary.all, 4, "tab counts come back with the list");
 
@@ -835,7 +835,7 @@ const waitForServer = async () => {
 
         const next = (await call("GET", `/api/tasks/${nextId}`, { token: A })).body;
         assert.strictEqual(next.title, "File the GST return");
-        assert.strictEqual(next.status, "Pending");
+        assert.strictEqual(next.status, "To Do");
         assert.strictEqual(next.recurrence, "monthly");
         assert.strictEqual(next.requiresReview, true);
         assert.ok(next.todoChecklist.length === 1 && next.todoChecklist.every((t) => !t.completed), "checklist starts unticked");
@@ -1299,6 +1299,82 @@ const waitForServer = async () => {
         pass("Module Access", "sales/leads gated per department, dual membership, explicit headship");
 
         pass("Sales Pipeline", `${headPipe.body.totals.leads} leads: scope isolation, follow-up invariant, stage history, outcomes, funnel`);
+
+        // ---------- 5c. SIMPLE TASK MODEL: tags, subtasks, blocked-by, watchers, activity ----------
+        const badPriority = await call("POST", "/api/tasks", { token: A, body: { title: "x", assignedTo: [member._id], priority: "Critical" } });
+        assert.strictEqual(badPriority.status, 400, "unknown priority rejected");
+        assert.strictEqual((await call("POST", "/api/tasks", { token: A, body: { title: "  ", assignedTo: [member._id] } })).status, 400, "blank title rejected");
+
+        // Due date is optional; Urgent is a priority; tags are normalised.
+        const web = await mk({ title: "Test website", priority: "Urgent", dueDate: undefined, tags: ["#Website", " website ", "Billing"], startDate: day(0) });
+        assert.strictEqual(web.dueDate, null, "a task may have no due date");
+        assert.deepStrictEqual(web.tags, ["website", "billing"], "tags lowercased, # stripped, de-duplicated");
+        assert.strictEqual(web.priority, "Urgent");
+        assert.strictEqual((await call("GET", "/api/tasks?tag=%23Billing", { token: A })).body.tasks.length, 1, "filter by tag");
+        assert.deepStrictEqual((await call("GET", "/api/tasks/tags", { token: A })).body.tags, ["billing", "website"]);
+        assert.deepStrictEqual((await call("GET", "/api/tasks/tags", { token: O })).body.tags, [], "tag list is scoped to what the user can see");
+
+        // Subtasks: title, assignee, status, due date - embedded, scoped to the parent's people.
+        const sub1 = await call("POST", `/api/tasks/${web._id}/subtasks`, { token: M, body: { title: "Design homepage", assignee: member._id, dueDate: day(2) } });
+        assert.strictEqual(sub1.status, 201);
+        assert.strictEqual((await call("POST", `/api/tasks/${web._id}/subtasks`, { token: M, body: { title: "Develop homepage" } })).body.subtasks.length, 2);
+        assert.strictEqual((await call("POST", `/api/tasks/${web._id}/subtasks`, { token: M, body: { title: "x", assignee: outsider._id } })).status, 400, "assignee must already be on the task");
+        assert.strictEqual((await call("POST", `/api/tasks/${web._id}/subtasks`, { token: M, body: { title: " " } })).status, 400, "blank subtask title");
+        assert.strictEqual((await call("POST", `/api/tasks/${web._id}/subtasks`, { token: O, body: { title: "sneaky" } })).status, 403, "outsiders cannot add subtasks");
+        const subId = sub1.body.subtasks[0]._id;
+        const subDone = await call("PUT", `/api/tasks/${web._id}/subtasks/${subId}`, { token: M, body: { status: "Completed" } });
+        assert.strictEqual(subDone.body.subtasks[0].status, "Completed");
+        assert.strictEqual((await call("PUT", `/api/tasks/${web._id}/subtasks/${subId}`, { token: M, body: { status: "Done" } })).status, 400);
+        assert.strictEqual((await call("GET", "/api/tasks", { token: A })).body.tasks.every((t) => t.title !== "Design homepage"), true, "subtasks never appear as tasks in lists");
+        const subGone = await call("DELETE", `/api/tasks/${web._id}/subtasks/${subDone.body.subtasks[1]._id}`, { token: M });
+        assert.strictEqual(subGone.body.subtasks.length, 1);
+
+        // Blocked by: shown as waiting, prevents starting, no loops.
+        const deploy = await mk({ title: "Deploy website", dueDate: day(5) });
+        const link = await call("PUT", `/api/tasks/${deploy._id}/blocked-by`, { token: A, body: { blockedBy: [web._id] } });
+        assert.strictEqual(link.status, 200);
+        assert.deepStrictEqual(link.body.waitingFor, ["Test website"]);
+        const blockedStart = await call("PUT", `/api/tasks/${deploy._id}/status`, { token: M, body: { status: "In Progress" } });
+        assert.strictEqual(blockedStart.status, 409, "cannot start a task that is waiting");
+        assert.ok(/Test website/.test(blockedStart.body.message), "the message names what it waits for");
+        assert.strictEqual((await call("PUT", `/api/tasks/${deploy._id}/status`, { token: M, body: { status: "Completed" } })).status, 409, "...nor complete it");
+        assert.strictEqual((await call("PUT", `/api/tasks/${deploy._id}/status`, { token: M, body: { status: "Blocked" } })).status, 200, "but it can be marked Blocked by hand");
+        const listed = (await call("GET", "/api/tasks", { token: A })).body.tasks.find((t) => t._id === deploy._id);
+        assert.deepStrictEqual(listed.waitingFor, ["Test website"], "lists carry waitingFor without extra requests");
+        assert.strictEqual((await call("PUT", `/api/tasks/${web._id}/blocked-by`, { token: A, body: { blockedBy: [deploy._id] } })).status, 400, "circular dependency refused");
+        assert.strictEqual((await call("PUT", `/api/tasks/${web._id}/blocked-by`, { token: A, body: { blockedBy: [web._id] } })).status, 400, "self-dependency refused");
+        assert.strictEqual((await call("PUT", `/api/tasks/${deploy._id}/blocked-by`, { token: O, body: { blockedBy: [] } })).status, 403, "outsiders cannot edit links");
+        await call("PUT", `/api/tasks/${web._id}/status`, { token: M, body: { status: "Completed" } });
+        assert.strictEqual((await call("PUT", `/api/tasks/${deploy._id}/status`, { token: M, body: { status: "In Progress" } })).status, 200, "unblocked once the blocker completes");
+        const deployDetail = (await call("GET", `/api/tasks/${deploy._id}`, { token: A })).body;
+        assert.deepStrictEqual(deployDetail.waitingFor, [], "nothing to wait for any more");
+
+        // Cancelled work is neither open nor overdue, and does not block anyone.
+        const dead = await mk({ title: "Old idea", dueDate: day(-3) });
+        assert.strictEqual((await call("GET", "/api/tasks?overdue=true", { token: A })).body.tasks.some((t) => t._id === dead._id), true);
+        await call("PUT", `/api/tasks/${dead._id}/status`, { token: A, body: { status: "Cancelled" } });
+        assert.strictEqual((await call("GET", "/api/tasks?overdue=true", { token: A })).body.tasks.some((t) => t._id === dead._id), false, "cancelled is never overdue");
+
+        // Watchers: opt in and out; only people who can open the task.
+        assert.strictEqual((await call("PUT", `/api/tasks/${web._id}/watch`, { token: O, body: { watching: true } })).status, 403);
+        const watching = await call("PUT", `/api/tasks/${web._id}/watch`, { token: A, body: { watching: true } });
+        assert.strictEqual(watching.body.isWatching, true);
+        assert.strictEqual((await call("GET", `/api/tasks/${web._id}`, { token: A })).body.isWatching, true);
+        assert.strictEqual((await call("PUT", `/api/tasks/${web._id}/watch`, { token: A, body: { watching: false } })).body.watchers, 0);
+
+        // Activity timeline: who did what, in order.
+        await call("PUT", `/api/tasks/${deploy._id}`, { token: A, body: { priority: "Urgent", dueDate: day(8), assignedTo: [member._id, outsider._id] } });
+        await call("POST", `/api/tasks/${deploy._id}/comments`, { token: A, body: { text: "ship it" } });
+        await call("PUT", `/api/tasks/${deploy._id}/status`, { token: A, body: { status: "Completed" } });
+        await call("PUT", `/api/tasks/${deploy._id}/status`, { token: A, body: { status: "In Progress" } });
+        const timeline = (await call("GET", `/api/tasks/${deploy._id}`, { token: A })).body.activity;
+        const kinds = timeline.map((e) => e.type);
+        ["created", "blocked", "status", "priority", "dueDate", "reassigned", "comment", "completed", "reopened"].forEach((k) =>
+            assert.ok(kinds.includes(k), `timeline records "${k}" (got ${kinds.join(",")})`));
+        assert.strictEqual(timeline[0].user.name, "Ada Admin", "entries name the actor");
+        assert.ok(timeline.find((e) => e.type === "reassigned").text.includes("Otto Outsider"), "assignment names the new assignee");
+        assert.strictEqual((await call("GET", "/api/tasks", { token: A })).body.tasks[0].activity, undefined, "lists stay light: no timeline");
+        pass("Task model v2", "tags, optional due date, Urgent, subtasks, blocked-by (+409 guard, no loops), Cancelled, watchers, activity timeline");
 
         console.log("\n  FEATURE VERIFICATION\n  " + "=".repeat(74));
         results.forEach((r) => console.log(`  [PASS] ${r.feature.padEnd(28)} ${r.detail}`));

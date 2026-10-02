@@ -17,3 +17,20 @@
 - Sign-up is closed by default (`ALLOW_SIGNUP=true` to reopen). The first account on an empty database becomes admin; invite tokens still work.
 - Login throttle: 10 failed attempts per IP+email per 15 minutes returns 429 (in-memory, per process).
 - Decision: one deployment per company (no `organization` field); tenant isolation = separate database.
+
+### Phase 2 — Core tasks
+- Statuses are now To Do, In Progress, Blocked, In Review, Completed, Cancelled. The old "Pending" is renamed
+  "To Do"; existing rows are converted automatically on server start (idempotent). Cancelled counts as closed:
+  never open, overdue or blocking. Added the Urgent priority. Due date is now optional (recurring tasks still need one).
+- Tags (`#website`): normalised, filterable (`?tag=`), `GET /api/tasks/tags`.
+- Subtasks (title, assignee, status, due date) embedded on the task: `POST/PUT/DELETE /api/tasks/:id/subtasks`.
+  Deliberate deviation from the spec's `parentTask`: embedded subtasks never pollute task lists, counts or scoping.
+  A subtask's assignee must already be on the parent task.
+- Blocked by: `PUT /api/tasks/:id/blocked-by`. Refuses self/circular links and tasks the caller cannot open.
+  A task waiting on unfinished work cannot be started or completed (409 naming what it waits for); lists and
+  the detail view carry `waitingFor`.
+- Watchers: `PUT /api/tasks/:id/watch`; followers are included in status/comment/update notifications.
+- Activity timeline on each task (created, assigned, reassigned, status, priority, due date, comment, attachment,
+  completed, reopened, review, blocked, subtask). Lists omit it to stay light.
+- UI: tags, subtasks, blocked banner + picker, follow button, status select and timeline on the task page;
+  tag filter and Blocked/Cancelled tabs on task lists; relaxed task form (only title + assignee required).

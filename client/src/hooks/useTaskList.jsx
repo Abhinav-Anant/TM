@@ -9,6 +9,7 @@ const useTaskList = () => {
     const [tasks, setTasks] = useState([]);
     const [tabs, setTabs] = useState([]);
     const [categories, setCategories] = useState([]);
+    const [tags, setTags] = useState([]);
     const [status, setStatus] = useState("All");
     const [filters, setFilters] = useState({ ...EMPTY_FILTERS });
     const [loading, setLoading] = useState(true);
@@ -25,10 +26,12 @@ const useTaskList = () => {
             const summary = data?.statusSummary || {};
             setTabs([
                 { label: "All", count: summary.all || 0 },
-                { label: "Pending", count: summary.pendingTasks || 0 },
+                { label: "To Do", count: summary.pendingTasks || 0 },
                 { label: "In Progress", count: summary.inProgressTasks || 0 },
+                { label: "Blocked", count: summary.blockedTasks || 0 },
                 { label: "In Review", count: summary.inReviewTasks || 0 },
                 { label: "Completed", count: summary.completedTasks || 0 },
+                { label: "Cancelled", count: summary.cancelledTasks || 0 },
             ]);
         } catch (error) {
             console.error("Error fetching tasks:", error);
@@ -45,9 +48,13 @@ const useTaskList = () => {
             .get(API_PATHS.TASKS.GET_CATEGORIES)
             .then(({ data }) => setCategories(data?.categories || []))
             .catch(() => setCategories([]));
+        axiosInstance
+            .get(API_PATHS.TASKS.GET_TAGS)
+            .then(({ data }) => setTags(data?.tags || []))
+            .catch(() => setTags([]));
     }, []);
 
-    return { tasks, tabs, categories, status, setStatus, filters, setFilters, loading, refresh };
+    return { tasks, tabs, categories, tags, status, setStatus, filters, setFilters, loading, refresh };
 };
 
 export default useTaskList;
