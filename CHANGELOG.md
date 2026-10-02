@@ -14,3 +14,6 @@
 - Server refuses to start without `JWT_SECRET`; auth failures no longer echo internal error text.
 - Profile avatars may only point at our own `/api/files/...` URLs.
 - `server/scripts/migrate-uploads.js` converts legacy `/uploads/` URLs on users and tasks (run once on existing data).
+- Sign-up is closed by default (`ALLOW_SIGNUP=true` to reopen). The first account on an empty database becomes admin; invite tokens still work.
+- Login throttle: 10 failed attempts per IP+email per 15 minutes returns 429 (in-memory, per process).
+- Decision: one deployment per company (no `organization` field); tenant isolation = separate database.

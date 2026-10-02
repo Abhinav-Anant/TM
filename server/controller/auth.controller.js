@@ -23,10 +23,34 @@ const issueToken = (res, userId) => {
 // Only our own authenticated file URLs may be stored as an avatar.
 const isOwnFileUrl = (url) => /^\/api\/files\/[0-9a-f]{24}(\/[^/]+)?$/.test(url || "");
 
+// ponytail: in-memory, per process - fine for one server; move to Redis if scaled out.
+const failures = new Map();
+const WINDOW_MS = 15 * 60 * 1000;
+const MAX_FAILURES = 10;
+const isThrottled = (key) => {
+    const entry = failures.get(key);
+    if (entry && entry.resetAt < Date.now()) failures.delete(key);
+    return (failures.get(key)?.count || 0) >= MAX_FAILURES;
+};
+const recordFailure = (key) => {
+    const entry = failures.get(key);
+    if (!entry || entry.resetAt < Date.now()) failures.set(key, { count: 1, resetAt: Date.now() + WINDOW_MS });
+    else entry.count += 1;
+};
+
 // Register User
 const registerUser = async (req, res) => {
     try {
         const { name, email, password, phone, adminInviteToken } = req.body;
+
+        // Accounts are made by an admin (Team page). Open signup is opt-in; the
+        // very first account bootstraps the deployment as its admin.
+        const bootstrap = (await User.estimatedDocumentCount()) === 0;
+        const invited = Boolean(adminInviteToken) &&
+            [process.env.ADMIN_INVITE_TOKEN, process.env.HEAD_INVITE_TOKEN].includes(adminInviteToken);
+        if (!bootstrap && !invited && process.env.ALLOW_SIGNUP !== "true") {
+            return res.status(403).json({ message: "Sign-up is closed. Ask an admin to create your account." });
+        }
 
         // Check if user exists
         const userExist = await User.findOne({ email });
@@ -36,7 +60,7 @@ const registerUser = async (req, res) => {
 
         // Role assignment with invite token validation. The same form field carries
         // either token; an unset env var must never match an empty submission.
-        let role = "member";
+        let role = bootstrap ? "admin" : "member";
         if (adminInviteToken && adminInviteToken === process.env.ADMIN_INVITE_TOKEN) {
             role = "admin";
         } else if (adminInviteToken && adminInviteToken === process.env.HEAD_INVITE_TOKEN) {
@@ -83,8 +107,15 @@ const loginUser = async (req, res) => {
         const { email, password } = req.body;
 
 
+        // Throttle guessing: 10 failures per IP+email per 15 minutes.
+        const throttleKey = `${req.ip}|${String(email).toLowerCase()}`;
+        if (isThrottled(throttleKey)) {
+            return res.status(429).json({ message: "Too many failed attempts. Try again in a few minutes." });
+        }
+
         const user = await User.findOne({ email });
         if (!user) {
+            recordFailure(throttleKey);
             return res.status(401).json({ message: "Invalid email or password" })
         };
 
@@ -92,6 +123,7 @@ const loginUser = async (req, res) => {
         // compare password
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
+            recordFailure(throttleKey);
             return res.status(401).json({ message: "Invalid email or password" })
         }
 

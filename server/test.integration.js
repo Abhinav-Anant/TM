@@ -210,13 +210,15 @@ const waitForServer = async () => {
         const admin = (await call("POST", "/api/auth/register", {
             body: { name: "Ada Admin", email: "admin@example.test", password: "pw123456", adminInviteToken: ADMIN_TOKEN },
         })).body;
-        const member = (await call("POST", "/api/auth/register", {
-            // spaces on purpose: the server must normalise this to 919876543210
-            body: { name: "Mo Member", email: "member@example.test", password: "pw123456", phone: "98765 43210" },
-        })).body;
-        const outsider = (await call("POST", "/api/auth/register", {
-            body: { name: "Otto Outsider", email: "outsider@example.test", password: "pw123456" },
-        })).body;
+        const A0 = admin.token;
+        // Accounts are admin-created now: sign-up is closed once the first admin exists.
+        const signUp = async ({ name, email, password, phone }) => {
+            const made = await call("POST", "/api/users", { token: A0, body: { name, email, password, phone, role: "member" } });
+            assert.strictEqual(made.status, 201, `create user failed: ${made.text}`);
+            return (await call("POST", "/api/auth/login", { body: { email, password } })).body;
+        };
+        const member = (await signUp({ name: "Mo Member", email: "member@example.test", password: "pw123456", phone: "98765 43210" }));
+        const outsider = (await signUp({ name: "Otto Outsider", email: "outsider@example.test", password: "pw123456" }));
 
         assert.strictEqual(admin.role, "admin", "admin invite token should grant admin");
         assert.strictEqual(member.role, "member");
@@ -432,7 +434,7 @@ const waitForServer = async () => {
 
         // the old public static route is gone
         const legacy = await call("GET", "/uploads/anything.txt");
-        assert.notStrictEqual(legacy.status, 200, "/uploads is no longer served");
+        assert.ok(legacy.status !== 200 || /<!doctype html/i.test(legacy.text), "/uploads is no longer served (only the SPA shell or an error comes back)");
 
         // avatar upload needs a session; the result is readable by signed-in users
         assert.strictEqual((await call("POST", "/api/auth/upload-image", { raw: multipart("image", [{ name: "a.png", type: "image/png", content: "PNGDATA" }]) })).status, 401, "anonymous avatar upload rejected");
@@ -619,6 +621,14 @@ const waitForServer = async () => {
         assert.strictEqual((await call("GET", "/api/notifications", { token: ghost })).status, 401);
         assert.strictEqual((await call("GET", "/api/tasks", { token: "not-a-jwt" })).status, 401);
         assert.strictEqual((await call("POST", "/api/tasks/upload", { token: M })).status, 400, "upload with no file");
+        const signupClosed = await call("POST", "/api/auth/register", { body: { name: "Rando", email: "rando@example.test", password: "pw123456" } });
+        assert.strictEqual(signupClosed.status, 403, "open sign-up is closed once an admin exists");
+
+        for (let i = 0; i < 10; i += 1) {
+            assert.strictEqual((await call("POST", "/api/auth/login", { body: { email: "throttle@example.test", password: "wrong-pw" } })).status, 401);
+        }
+        assert.strictEqual((await call("POST", "/api/auth/login", { body: { email: "throttle@example.test", password: "wrong-pw" } })).status, 429, "11th failed login is throttled");
+        assert.strictEqual((await call("POST", "/api/auth/login", { body: { email: "throttle@example.test", password: "pw123456" } })).status, 429, "still throttled while the window is open");
         pass("Auth guards", "401 unauthenticated, 403 role-gated, JSON 404 on unknown API route");
 
 
@@ -638,12 +648,8 @@ const waitForServer = async () => {
         assert.strictEqual(headSales.role, "head", "head invite token grants the head role");
         const H = headSales.token;
 
-        const salesMember = (await call("POST", "/api/auth/register", {
-            body: { name: "Sam Sales", email: "sam@example.test", password: "pw123456" },
-        })).body;
-        const engMember = (await call("POST", "/api/auth/register", {
-            body: { name: "Eve Eng", email: "eve@example.test", password: "pw123456" },
-        })).body;
+        const salesMember = (await signUp({ name: "Sam Sales", email: "sam@example.test", password: "pw123456" }));
+        const engMember = (await signUp({ name: "Eve Eng", email: "eve@example.test", password: "pw123456" }));
 
         // A head with no department yet can assign to nobody.
         assert.strictEqual(
@@ -999,12 +1005,8 @@ const waitForServer = async () => {
         const crmHead = (await call("POST", "/api/auth/register", {
             body: { name: "Hera Head", email: "crmhead@example.test", password: "pw123456", adminInviteToken: HEAD_TOKEN },
         })).body;
-        const rep = (await call("POST", "/api/auth/register", {
-            body: { name: "Ravi Rep", email: "rep@example.test", password: "pw123456", phone: "98765 11111" },
-        })).body;
-        const rival = (await call("POST", "/api/auth/register", {
-            body: { name: "Rita Rival", email: "rival@example.test", password: "pw123456" },
-        })).body;
+        const rep = (await signUp({ name: "Ravi Rep", email: "rep@example.test", password: "pw123456", phone: "98765 11111" }));
+        const rival = (await signUp({ name: "Rita Rival", email: "rival@example.test", password: "pw123456" }));
         for (const u of [crmHead, rep, rival]) {
             await call("POST", "/api/departments/" + crm._id + "/members", {
                 // Headship is explicit now - the head role alone does not grant it.
@@ -1221,9 +1223,7 @@ const waitForServer = async () => {
         const mktHead = (await call("POST", "/api/auth/register", {
             body: { name: "Maya Marketing", email: "mkthead@example.test", password: "pw123456", adminInviteToken: HEAD_TOKEN },
         })).body;
-        const walledOff = (await call("POST", "/api/auth/register", {
-            body: { name: "Owen Outsider", email: "walledOff@example.test", password: "pw123456" },
-        })).body;
+        const walledOff = (await signUp({ name: "Owen Outsider", email: "walledoff@example.test", password: "pw123456" }));
         const MH = mktHead.token, OU = walledOff.token;
 
         await call("POST", "/api/departments/" + mkt._id + "/members", { token: A, body: { userId: mktHead._id, head: true } });

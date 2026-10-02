@@ -1,9 +1,8 @@
 # TODO — SOHO redesign
 
 - [x] Phase 1: security, file access, auth cookie, CORS
-- [ ] Phase 1: organization (multi-company) isolation — DECISION NEEDED: single-tenant per deployment vs `organization` on every model
-- [ ] Phase 1: self-registration policy (open `/register` lets anyone create a member account)
-- [ ] Phase 1: login rate limiting
+- [x] Phase 1: one deployment per company (decided); signup closed; login throttle
+- [ ] Hide the /signup link on the login page when sign-up is closed
 - [ ] Phase 2: task model (statuses, subtasks, dependencies, tags, watchers, activity)
 - [ ] Phase 3: projects
 - [ ] Phase 4: My Work, dashboards, time tracking, reminders
