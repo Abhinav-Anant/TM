@@ -82,3 +82,24 @@
 - **Saved filters**: name and keep any task-list filter (`/api/saved-filters`, private, max 20, only whitelisted keys stored).
 - Task filters grew Employee, Department, "Assigned to me" and due-date presets (overdue / today / this week / next 7 days) for admins and heads;
   the board reuses the same filter bar.
+
+### Phase 6 — Notifications
+- **One engine** (`utils/notify.js`): every alert is stored in-app and pushed live, then WhatsApp / email / mobile push are queued per the
+  recipient's preferences. Slow or fallible channels never run inside a request.
+- **Events** (`utils/notificationPrefs.js`): task assigned, reassigned (whoever is taken off the task), mentioned, due tomorrow, due today,
+  overdue, completed, sent for review, approved (to the people who did the work, instead of "completed"), blocked (status Blocked, or a blocker
+  link), plus the existing updated / status / comment / escalation alerts.
+- **Preferences** (`GET/PUT /api/notifications/preferences`, Profile page): a per-event grid (in-app, WhatsApp, email, push) and a master switch
+  for WhatsApp, email and push. Stored as overrides, so new events and changed defaults reach everyone who never touched them. Defaults follow the
+  spec (Assigned: in-app + WhatsApp; Overdue: all; Mention: in-app only). Each switch says when nothing is behind it (no number, no SMTP, no device).
+- **Email**: plain SMTP through nodemailer (`SMTP_HOST`, `SMTP_FROM`, ...); off when unset.
+- **Push**: Expo push for the mobile app. `POST/DELETE /api/notifications/push-token`; devices that change hands move, dead tokens are pruned,
+  max five per person. The mobile app does not register tokens yet (Phase 8).
+- **@mentions** in comments: the picker sends ids; only people who can open the task are notified (so a mention cannot leak a task), and a
+  mentioned person is not also told "new comment".
+- **Background jobs** (`utils/jobs.js`): a MongoDB-backed queue with atomic claims, retry with backoff (5 attempts, then parked for a week),
+  deferral, and crash recovery (an abandoned job's lock expires). WhatsApp sends share one pacing slot across all instances. The deadline,
+  escalation and reminder scans now run under a shared lock, so several instances scan once, not once each. Decision: no Redis; the queue is the
+  same shape as BullMQ's, confined to one file, if you ever want to swap it.
+- Tests: new `server/test.jobs.js` (queue, concurrent claimers, retries, lock races) runs as part of `npm test`; end-to-end tests use a fake SMTP server
+  and a fake Expo service.

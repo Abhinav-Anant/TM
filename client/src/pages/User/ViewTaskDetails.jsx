@@ -184,6 +184,7 @@ const ViewTaskDetails = () => {
 
             <TaskComments
               taskId={id}
+              people={task.assignedTo || []}
               comments={task.comments || []}
               onChange={(comments) => setTask((prev) => ({ ...prev, comments }))}
             />

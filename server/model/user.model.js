@@ -19,6 +19,10 @@ const userSchema = new mongoose.Schema({
     phone: { type: String, default: null },
     role: { type: String, enum: ["admin", "head", "member"], default: "member" },
     memberships: { type: [membershipSchema], default: [] },
+    // Overrides only - see utils/notificationPrefs.js for the defaults and the shape.
+    notificationPrefs: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // Expo push tokens, one per signed-in device.
+    pushTokens: { type: [String], default: [] },
 },
 {
     timestamps: true 

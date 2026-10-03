@@ -5,9 +5,11 @@ const notificationSchema = new mongoose.Schema({
     task: { type: mongoose.Schema.Types.ObjectId, ref: "Task" },
     type: {
         type: String,
-        enum: ['assigned', 'updated', 'status', 'comment', 'deadline', 'overdue', 'review', 'escalation'],
+        enum: ['assigned', 'reassigned', 'mention', 'updated', 'status', 'comment', 'deadline', 'overdue', 'review', 'approved', 'completed', 'blocked', 'escalation'],
         required: true,
     },
+    // The preference key this was sent under (a 'deadline' is due_today or due_tomorrow).
+    event: { type: String, default: null },
     title: { type: String, required: true },
     message: { type: String, default: "" },
     read: { type: Boolean, default: false },

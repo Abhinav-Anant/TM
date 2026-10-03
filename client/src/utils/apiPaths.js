@@ -80,6 +80,7 @@ export const API_PATHS = {
     NOTIFICATIONS: {
         GET_ALL: "/api/notifications",
         STREAM: "/api/notifications/stream", // Server-Sent Events live feed
+        PREFERENCES: "/api/notifications/preferences", // GET / PUT per-event channel choices
         MARK_READ: (id) => `/api/notifications/${id}/read`,
         MARK_ALL_READ: "/api/notifications/read-all",
         DELETE: (id) => `/api/notifications/${id}`,

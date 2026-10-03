@@ -75,6 +75,15 @@ const setBlockedBy = async (req, res) => {
         await task.save();
 
         await task.populate("blockedBy", "title status");
+        const waiting = task.blockedBy.filter((t) => !["Completed", "Cancelled"].includes(t.status));
+        if (added.length && waiting.length) {
+            await notify({
+                userIds: task.assignedTo,
+                actor: req.user, type: "blocked", task: task._id,
+                title: `Blocked: ${task.title}`,
+                message: `${req.user.name} made "${task.title}" wait for ${waiting.map((t) => t.title).join(", ")}.`,
+            });
+        }
         res.json({
             blockedBy: task.blockedBy,
             waitingFor: task.blockedBy.filter((t) => !["Completed", "Cancelled"].includes(t.status)).map((t) => t.title),

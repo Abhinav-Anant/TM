@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import moment from 'moment';
 import {
     LuBell, LuCheckCheck, LuX, LuCircleAlert, LuClock,
-    LuMessageSquare, LuUserPlus, LuRefreshCw, LuCircleCheck,
+    LuMessageSquare, LuUserPlus, LuRefreshCw, LuCircleCheck, LuAtSign, LuBan, LuClipboardCheck, LuTriangleAlert,
 } from 'react-icons/lu';
 import { NotificationContext } from '../../context/notificationContext';
 
@@ -14,6 +14,13 @@ const TYPE_STYLE = {
     comment: { icon: LuMessageSquare, color: 'text-pending bg-pending/10 border-pending/25' },
     deadline: { icon: LuClock, color: 'text-signal bg-signal/10 border-signal/25' },
     overdue: { icon: LuCircleAlert, color: 'text-alert bg-alert/10 border-alert/25' },
+    mention: { icon: LuAtSign, color: 'text-ice bg-ice/10 border-ice/25' },
+    reassigned: { icon: LuRefreshCw, color: 'text-ice bg-ice/10 border-ice/25' },
+    review: { icon: LuClipboardCheck, color: 'text-signal bg-signal/10 border-signal/25' },
+    approved: { icon: LuCircleCheck, color: 'text-done bg-done/10 border-done/25' },
+    completed: { icon: LuCircleCheck, color: 'text-done bg-done/10 border-done/25' },
+    blocked: { icon: LuBan, color: 'text-alert bg-alert/10 border-alert/25' },
+    escalation: { icon: LuTriangleAlert, color: 'text-alert bg-alert/10 border-alert/25' },
 };
 
 const NotificationBell = () => {

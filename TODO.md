@@ -9,18 +9,22 @@
 - [ ] Mobile: infinite scroll instead of limit=100 (Phase 8)
 - [ ] Dashboard endpoints still load all of a user's tasks into memory (getUserDashboardData) - move to aggregation in Phase 4
 - [x] Phase 3: projects, project dashboard, project task filtering
-- [ ] Project member/manager notifications ("you were added to...") - Phase 6 notification engine
+- [ ] Project member/manager notifications ("you were added to...") - engine is ready, just add the calls
 - [ ] Mobile: Projects tab (Phase 8)
 - [x] Phase 4: My Work, dashboards, time tracking, reminders, Quick Add
 - [x] Phase 5: Kanban, calendar, search, saved filters
 - [ ] Custom recurrence (spec item 21 lists Daily/Weekly/Monthly/Custom; only the first three exist)
 - [ ] Calendar: drag a task to a new day to reschedule (not in spec, skipped)
 - [ ] Mobile: Board and calendar views (Phase 8)
-- [ ] Phase 6: notification engine + preferences
+- [x] Phase 6: notification engine + preferences (email via SMTP, Expo push, DB-backed job queue)
 - [ ] Phase 7: reports + export
 - [ ] Phase 8: mobile
 - [ ] Background jobs: replace `setInterval` reminders with a lock/queue (multi-instance safe)
 - [ ] S3 driver is untested against a real bucket
 - [ ] Company dashboard for admins (employees, departments, projects, active projects) - spec item 15
-- [ ] Reminders still ride the in-process setInterval; deadline/escalation scans dedupe by lookup, not by claim - Phase 6 jobs work
 - [ ] Mobile: My Work, time tracking, reminders (Phase 8)
+- [ ] Mobile: register the Expo push token after sign-in (server endpoint exists), show the new notification kinds (Phase 8)
+- [ ] Comment attachments (spec item 9); comments have text, mentions, author and time today
+- [ ] Admin Settings area (spec item 31) should also host notification defaults; per-user settings live on the Profile page for now
+- [ ] Email is plain text; add an HTML template if you want branded mail
+- [ ] Live-test email against the real SMTP provider and push on a real device; both are only tested against fakes

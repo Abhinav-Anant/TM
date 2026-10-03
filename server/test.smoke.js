@@ -33,6 +33,56 @@ const { nextDueDate, RECURRENCES } = require("./utils/recurrence.js");
     assert.deepStrictEqual(occurrencesBetween(new Date("2026-12-01T00:00:00Z"), "weekly", from, to), [], "a series that starts after the window shows nothing");
 }
 
+// --- notification preferences ---------------------------------------------------
+{
+    const { EVENTS, eventFor, wants, describe, mergePrefs } = require("./utils/notificationPrefs.js");
+    const { dueEvent } = require("./utils/reminders.js");
+
+    assert.strictEqual(Object.values(EVENTS).filter((e) => e.group === "main").length, 10, "the ten events the spec names");
+    assert.strictEqual(eventFor("deadline"), "due_tomorrow");
+    assert.strictEqual(eventFor("deadline", "due_today"), "due_today", "an explicit event wins");
+    assert.strictEqual(eventFor("deadline", "made_up"), "due_tomorrow", "an unknown event falls back to the type");
+    assert.strictEqual(eventFor("nonsense"), null);
+
+    // defaults: the spec's examples
+    const fresh = {};
+    assert.deepStrictEqual([wants(fresh, "assigned", "inApp"), wants(fresh, "assigned", "whatsapp"), wants(fresh, "assigned", "email")], [true, true, false], "Task Assigned: in-app + WhatsApp, no email");
+    assert.deepStrictEqual([wants(fresh, "overdue", "inApp"), wants(fresh, "overdue", "whatsapp"), wants(fresh, "overdue", "email")], [true, true, true], "Task Overdue: all three");
+    assert.deepStrictEqual([wants(fresh, "mention", "inApp"), wants(fresh, "mention", "whatsapp")], [true, false], "Mention: in-app only");
+    assert.strictEqual(wants(fresh, "never_heard_of_it", "email"), true, "an unknown event is on rather than silently dropped");
+    assert.strictEqual(wants(undefined, "assigned", "inApp"), true, "a missing user gets defaults");
+
+    // overrides and master switches
+    const picky = { notificationPrefs: { events: { assigned: { email: true, whatsapp: false } } } };
+    assert.deepStrictEqual([wants(picky, "assigned", "email"), wants(picky, "assigned", "whatsapp"), wants(picky, "assigned", "inApp")], [true, false, true]);
+    const mute = { notificationPrefs: { channels: { email: false }, events: { assigned: { email: true } } } };
+    assert.strictEqual(wants(mute, "assigned", "email"), false, "the email master switch beats a per-event yes");
+    assert.strictEqual(wants({ notificationPrefs: { channels: { whatsapp: false } } }, "overdue", "whatsapp"), false);
+    assert.strictEqual(wants({ notificationPrefs: { channels: { whatsapp: false } } }, "overdue", "inApp"), true, "in-app has no master switch");
+
+    // the settings table reports raw choices, separate from the master switches
+    const table = describe(mute);
+    assert.strictEqual(table.channels.email, false);
+    assert.strictEqual(table.events.find((e) => e.key === "assigned").email, true, "the per-event choice survives the master switch");
+    assert.strictEqual(table.events.length, Object.keys(EVENTS).length);
+
+    // validation
+    assert.ok(mergePrefs({}, { events: { bogus: { email: true } } }).error, "unknown event");
+    assert.ok(mergePrefs({}, { events: { assigned: { sms: true } } }).error, "unknown channel");
+    assert.ok(mergePrefs({}, { events: { assigned: { email: "yes" } } }).error, "non-boolean");
+    assert.ok(mergePrefs({}, { channels: { inApp: false } }).error, "in-app is not switchable");
+    assert.ok(mergePrefs({}, { channels: "off" }).error);
+    const merged = mergePrefs({ events: { assigned: { email: true } } }, { events: { assigned: { push: false } }, channels: { push: false } }).prefs;
+    assert.deepStrictEqual(merged.events.assigned, { email: true, push: false }, "updates merge, they do not replace");
+    assert.strictEqual(merged.channels.push, false);
+
+    // due today vs tomorrow, by calendar day
+    const noon = new Date("2026-10-07T12:00:00Z");
+    assert.strictEqual(dueEvent(new Date("2026-10-07T23:00:00Z"), noon), "due_today");
+    assert.strictEqual(dueEvent(new Date("2026-10-07T01:00:00Z"), noon), "due_today", "earlier today but not overdue-flagged here still reads as today");
+    assert.strictEqual(dueEvent(new Date("2026-10-08T00:30:00Z"), noon), "due_tomorrow");
+}
+
 // --- "today" in the caller's timezone, and reminders ----------------------
 {
     const { dayBounds, computeRemindAt, reminderError } = require("./utils/workTime.js");

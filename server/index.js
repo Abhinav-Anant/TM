@@ -7,6 +7,8 @@ const cors = require("cors");
 const multer = require("multer");
 const connection = require("./configue/db.js"); // Ensure this is the correct path to your DB configuration
 const { startReminders } = require("./utils/reminders.js");
+const { startWorker } = require("./utils/jobs.js");
+const { emailEnabled } = require("./utils/email.js");
 const { whatsappEnabled } = require("./utils/whatsapp.js");
 
 // Route imports
@@ -91,7 +93,9 @@ app.listen(PORT, async () => {
         // Task status "Pending" was renamed "To Do"; idempotent, so safe on every boot.
         await require("./model/task.model.js").collection.updateMany({ status: "Pending" }, { $set: { status: "To Do" } });
         console.log(`Server is running on port ${PORT}`);
+        console.log(`Email notifications: ${emailEnabled ? "enabled" : "disabled (set SMTP_HOST / SMTP_FROM to enable)"}`);
         console.log(`WhatsApp notifications: ${whatsappEnabled ? "enabled" : "disabled (set BLASTUP_URL / BLASTUP_API_KEY to enable)"}`);
+        startWorker();
         startReminders();
     } catch (error) {
         console.error("Database connection failed:", error);

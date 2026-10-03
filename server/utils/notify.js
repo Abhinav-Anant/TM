@@ -1,35 +1,56 @@
 const Notification = require('../model/notification.model.js');
 const User = require('../model/user.model.js');
 const { push } = require('./sse.js');
-const { sendWhatsApp } = require('./whatsapp.js');
+const { sendWhatsApp, whatsappEnabled } = require('./whatsapp.js');
+const { sendEmail, emailEnabled } = require('./email.js');
+const { sendPush } = require('./push.js');
+const { registerJob, enqueue, acquireLock } = require('./jobs.js');
+const { eventFor, wants } = require('./notificationPrefs.js');
 
 const CLIENT_URL = process.env.CLIENT_URL || "";
 
 // Must stay above the gateway's Safe Mode minimum gap (1s at its most permissive
 // tier) or paced sends still get rejected. Set to 0 in tests to keep them quick.
 const SEND_GAP_MS = Number(process.env.WHATSAPP_SEND_GAP_MS ?? 1200);
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// ---- delivery jobs: slow or fallible channels run in the queue, never inside a request ----------
+registerJob("whatsapp", async ({ to, text }) => {
+    // The gateway rejects (not queues) sends that come too fast. One shared slot across ALL app
+    // instances: whoever wins it sends, everyone else reschedules for when it frees up.
+    if (SEND_GAP_MS > 0) {
+        const slot = await acquireLock("whatsapp-slot", SEND_GAP_MS);
+        if (!slot.ok) return { retryAt: slot.until };
+    }
+    if (!await sendWhatsApp({ to, text })) throw new Error("WhatsApp gateway unreachable or rejected the message");
+});
+registerJob("email", async (payload) => { await sendEmail(payload); });
+registerJob("push", async (payload) => { await sendPush(payload); });
 
 /**
- * Single dispatch point for every alert: stores an in-app notification,
- * pushes it over SSE and (when the WhatsApp gateway is configured) messages
- * the recipient. Duplicates and the actor themselves are filtered out.
+ * The single dispatch point for every alert. For each recipient it:
+ *   1. stores an in-app notification and pushes it live over SSE        (if they want it in-app)
+ *   2. queues a WhatsApp / email / mobile push                          (per their preferences)
+ * Duplicates and the actor themselves are filtered out.
  *
- * `actor` is the user whose action caused the alert (a full user doc, usually
- * `req.user`). Their name is already baked into `message` by the caller; this
- * is what keeps them from being notified about their own action. Omit it for
- * system-generated alerts like deadline reminders.
+ * `type` is the stored kind; `event` (optional) is the preference key when one type covers several
+ * (a "deadline" can be "due today" or "due tomorrow"). `actor` is the user whose action caused the alert;
+ * omit it for system alerts like reminders.
  */
-const notify = async ({ userIds, actor, type, title, message = "", task }) => {
+const notify = async ({ userIds, actor, type, title, message = "", task, event }) => {
     const actorId = actor && actor._id;
     const ids = [...new Set((userIds || []).filter(Boolean).map(String))]
         .filter((id) => !actorId || id !== String(actorId));
 
     if (ids.length === 0) return [];
 
-    const docs = await Notification.insertMany(
-        ids.map((user) => ({ user, task, type, title, message }))
-    );
+    const ev = eventFor(type, event);
+    const users = await User.find({ _id: { $in: ids } }).select("name email phone pushTokens notificationPrefs").lean();
+    const byId = new Map(users.map((u) => [String(u._id), u]));
+
+    const inAppIds = ids.filter((id) => wants(byId.get(id), ev, "inApp"));
+    const docs = inAppIds.length
+        ? await Notification.insertMany(inAppIds.map((user) => ({ user, task, type, event: ev, title, message })))
+        : [];
 
     // Carry the authoritative unread count on the frame - a client that derives it
     // by incrementing drifts whenever it misses or double-counts an event.
@@ -49,31 +70,32 @@ const notify = async ({ userIds, actor, type, title, message = "", task }) => {
         });
     }));
 
-    // Only people who saved a number get a message; everyone else still has the
-    // in-app alert, so a missing number degrades reach, never delivery.
-    const recipients = await User.find({ _id: { $in: ids }, phone: { $ne: null } }).select("phone name");
+    // Everything below is best-effort and off the request path: a missing phone, an unset SMTP host or a
+    // dead gateway degrades reach, never delivery of the in-app alert that already landed.
     const link = task ? `${CLIENT_URL}/user/task-details/${task}` : CLIENT_URL;
-
-    // Sequential, with a gap, and deliberately not awaited.
-    //
-    // The gateway's Safe Mode enforces a minimum gap between sends and REJECTS
-    // anything faster rather than queuing it. A completion notifies the assignees,
-    // their department head and every admin at once, so a concurrent Promise.all
-    // would get the first message through and lose the rest.
-    //
-    // Not awaited because the in-app notification and the SSE push - everything
-    // the UI needs - have already landed by this point. Pacing half a dozen
-    // messages would otherwise hold the HTTP response open for several seconds.
-    // sendWhatsApp never throws, so nothing here can reject.
-    void (async () => {
-        for (const user of recipients) {
-            await sendWhatsApp({
+    const jobs = [];
+    for (const user of users) {
+        if (whatsappEnabled && user.phone && wants(user, ev, "whatsapp")) {
+            jobs.push(enqueue("whatsapp", {
                 to: user.phone,
                 text: `*${title}*\n\nHi ${user.name},\n${message}` + (link ? `\n\n${link}` : ""),
-            });
-            if (SEND_GAP_MS > 0) await sleep(SEND_GAP_MS);
+            }));
         }
-    })();
+        if (emailEnabled && user.email && wants(user, ev, "email")) {
+            jobs.push(enqueue("email", {
+                to: user.email,
+                subject: title,
+                text: `Hi ${user.name},\n\n${message}` + (link ? `\n\nOpen the task: ${link}` : ""),
+            }));
+        }
+        if (user.pushTokens?.length && wants(user, ev, "push")) {
+            jobs.push(enqueue("push", {
+                userId: String(user._id), tokens: user.pushTokens, title, body: message,
+                data: task ? { taskId: String(task) } : {},
+            }));
+        }
+    }
+    await Promise.all(jobs).catch((error) => console.error("Could not queue notification delivery:", error.message));
 
     return docs;
 };

@@ -4,6 +4,7 @@ const Notification = require('../model/notification.model.js');
 const { notify } = require('./notify.js');
 const { departmentHeadsOf } = require('./scope.js');
 const { MINUTE: MS_PER_MINUTE } = require('./workTime.js');
+const { acquireLock } = require('./jobs.js');
 
 const MINUTE = 60 * 1000;
 const WINDOW_HOURS = Number(process.env.REMINDER_WINDOW_HOURS) || 24;
@@ -22,6 +23,12 @@ const ESCALATE_AFTER_DAYS = parseEscalateAfterDays(process.env.ESCALATE_AFTER_DA
 const ESCALATION_WINDOW_DAYS = 7;
 
 const formatDate = (date) => new Date(date).toDateString();
+
+/** "due_today" or "due_tomorrow" for a not-yet-overdue task, by calendar day (server clock). */
+const dueEvent = (due, now = new Date()) => {
+    const day = (d) => Math.floor(new Date(d).getTime() / DAY);
+    return day(due) <= day(now) ? "due_today" : "due_tomorrow";
+};
 
 /** Finds open tasks that are due soon or already overdue and alerts their assignees once each. */
 const scanDeadlines = async () => {
@@ -49,6 +56,7 @@ const scanDeadlines = async () => {
         await notify({
             userIds: targets,
             type,
+            event: overdue ? "overdue" : dueEvent(task.dueDate, now),
             task: task._id,
             title: overdue ? `Overdue: ${task.title}` : `Due soon: ${task.title}`,
             message: overdue
@@ -115,6 +123,7 @@ const scanReminders = async (now = new Date()) => {
         await notify({
             userIds: task.assignedTo,
             type: "deadline",
+            event: dueEvent(task.dueDate, now),
             task: task._id,
             title: `Reminder: ${task.title}`,
             message: `"${task.title}" ${when}.`,
@@ -124,13 +133,20 @@ const scanReminders = async (now = new Date()) => {
     return sent;
 };
 
-// ponytail: in-process setInterval. Reminders are claim-guarded so extra instances cannot double-send;
-// the deadline/escalation scans above still dedupe by notification lookup - move them to a queue in the jobs phase.
+// Every instance ticks, but only the one that wins the shared lock scans. The scans also dedupe on their own
+// (notification lookup / per-task claim), so a missed or doubled tick can never double-send.
 const startReminders = () => {
-    const run = () => scanDeadlines()
-        .then(() => scanEscalations())
-        .then(() => scanReminders())
-        .catch((err) => console.error("Reminder scan failed:", err.message));
+    const run = async () => {
+        try {
+            const lock = await acquireLock("scan", Math.max(1000, INTERVAL_MINUTES * MINUTE * 0.8));
+            if (!lock.ok) return;
+            await scanDeadlines();
+            await scanEscalations();
+            await scanReminders();
+        } catch (err) {
+            console.error("Reminder scan failed:", err.message);
+        }
+    };
     run();
     const timer = setInterval(run, INTERVAL_MINUTES * MINUTE);
     timer.unref?.();
@@ -138,4 +154,4 @@ const startReminders = () => {
     return timer;
 };
 
-module.exports = { startReminders, scanDeadlines, scanEscalations, scanReminders };
+module.exports = { startReminders, scanDeadlines, scanEscalations, scanReminders, dueEvent };

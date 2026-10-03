@@ -6,6 +6,7 @@ import { UserContext } from '../context/userContext';
 import axiosInstance from '../utils/axiosInstance';
 import { API_PATHS } from '../utils/apiPaths';
 import Input from '../customcomponent/Input';
+import NotificationSettings from '../components/NotificationSettings';
 
 /**
  * Where a member puts the number their task alerts go to. Deliberately the only
@@ -65,7 +66,7 @@ const Profile = () => {
   return (
     // Must match the sidebar label exactly, or the nav item never highlights.
     <DashboardLayout activeMenu="My Profile">
-      <div className="py-6 max-w-xl">
+      <div className="py-6 max-w-3xl">
         <h2 className="font-display text-2xl text-beam">My profile</h2>
         <p className="text-sm text-mist mt-1.5">
           Your name as the team sees it, and where your task alerts go.
@@ -109,6 +110,8 @@ const Profile = () => {
             </button>
           </div>
         </form>
+
+        <NotificationSettings />
 
         <form className="panel p-6 mt-5" onSubmit={handleChangePassword}>
           <h3 className="font-display text-lg text-beam">Change password</h3>

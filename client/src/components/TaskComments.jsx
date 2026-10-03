@@ -8,10 +8,17 @@ import { UserContext } from '../context/userContext';
 
 const initials = (name = "?") => name.trim().charAt(0).toUpperCase();
 
-const TaskComments = ({ taskId, comments = [], onChange }) => {
+const TaskComments = ({ taskId, comments = [], people = [], onChange }) => {
     const { user } = useContext(UserContext);
     const [text, setText] = useState("");
     const [posting, setPosting] = useState(false);
+
+    // "@Xe" at the end of the box offers the people on the task whose names start that way.
+    const partial = /(?:^|\s)@([\w-]*)$/.exec(text);
+    const suggestions = partial
+        ? people.filter((p) => p._id !== user?._id && p.name.toLowerCase().startsWith(partial[1].toLowerCase())).slice(0, 5)
+        : [];
+    const pick = (person) => setText(text.replace(/@([\w-]*)$/, `@${person.name} `));
 
     const submit = async (e) => {
         e.preventDefault();
@@ -20,7 +27,9 @@ const TaskComments = ({ taskId, comments = [], onChange }) => {
 
         setPosting(true);
         try {
-            const { data } = await axiosInstance.post(API_PATHS.TASKS.ADD_COMMENT(taskId), { text: trimmed });
+            // Only names actually written in the comment count as mentions.
+            const mentions = people.filter((p) => trimmed.includes(`@${p.name}`)).map((p) => p._id);
+            const { data } = await axiosInstance.post(API_PATHS.TASKS.ADD_COMMENT(taskId), { text: trimmed, mentions });
             onChange(data.comments || []);
             setText("");
         } catch (error) {
@@ -93,13 +102,24 @@ const TaskComments = ({ taskId, comments = [], onChange }) => {
                 ))}
             </div>
 
-            <form className="flex items-end gap-2 mt-4" onSubmit={submit}>
+            <form className="flex items-end gap-2 mt-4 relative" onSubmit={submit}>
+                {suggestions.length > 0 && (
+                    <ul role="listbox" aria-label="Mention someone" className="absolute bottom-full left-0 mb-1 bg-deck border border-white/12 shadow-xl rounded-lg py-1 min-w-48 z-10">
+                        {suggestions.map((p) => (
+                            <li key={p._id}>
+                                <button type="button" role="option" className="w-full text-left text-sm text-beam px-3 py-1.5 hover:bg-white/8 cursor-pointer" onMouseDown={(e) => { e.preventDefault(); pick(p); }}>
+                                    @{p.name}
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                )}
                 <textarea
                     rows={2}
                     value={text}
                     maxLength={2000}
                     onChange={(e) => setText(e.target.value)}
-                    placeholder="Write a comment..."
+                    placeholder="Write a comment... type @ to mention someone"
                     aria-label="Write a comment"
                     className="field flex-1 resize-y"
                 />

@@ -21,6 +21,62 @@ const ADMIN_TOKEN = "let-me-in";
 const HEAD_TOKEN = "lead-me-in";
 const UPLOAD_DIR = path.join(__dirname, "uploads");
 
+
+// --- fake SMTP server: proves an email really leaves, to the right person, with the right subject ---
+const SMTP_PORT = 4326;
+const startSmtp = () => {
+    const mails = [];
+    const server = net.createServer((socket) => {
+        let inData = false, buffer = "", mail = { to: [], raw: "" };
+        socket.write("220 fake ESMTP\r\n");
+        socket.on("data", (chunk) => {
+            buffer += chunk.toString();
+            for (;;) {
+                if (inData) {
+                    const end = buffer.indexOf("\r\n.\r\n");
+                    if (end === -1) return;
+                    mail.raw = buffer.slice(0, end);
+                    buffer = buffer.slice(end + 5);
+                    inData = false;
+                    mails.push({ to: mail.to, subject: (/^Subject: (.*)$/m.exec(mail.raw) || [])[1] || "", raw: mail.raw });
+                    mail = { to: [], raw: "" };
+                    socket.write("250 queued\r\n");
+                    continue;
+                }
+                const eol = buffer.indexOf("\r\n");
+                if (eol === -1) return;
+                const line = buffer.slice(0, eol);
+                buffer = buffer.slice(eol + 2);
+                const cmd = line.slice(0, 4).toUpperCase();
+                if (cmd === "EHLO") socket.write("250-fake\r\n250 8BITMIME\r\n");
+                else if (cmd === "RCPT") { mail.to.push(/<(.+)>/.exec(line)[1]); socket.write("250 ok\r\n"); }
+                else if (cmd === "DATA") { inData = true; socket.write("354 go\r\n"); }
+                else if (cmd === "QUIT") { socket.write("221 bye\r\n"); socket.end(); return; }
+                else socket.write("250 ok\r\n");
+            }
+        });
+        socket.on("error", () => {});
+    });
+    return new Promise((resolve) => server.listen(SMTP_PORT, "127.0.0.1", () => resolve({ server, mails })));
+};
+
+// --- fake Expo push service: records messages, reports tokens containing "dead" as unregistered ---
+const EXPO_PORT = 4327;
+const startExpo = () => {
+    const messages = [];
+    const server = http.createServer((req, res) => {
+        let body = "";
+        req.on("data", (c) => { body += c; });
+        req.on("end", () => {
+            const batch = JSON.parse(body || "[]");
+            messages.push(...batch);
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ data: batch.map((m) => (m.to.includes("dead") ? { status: "error", details: { error: "DeviceNotRegistered" } } : { status: "ok" })) }));
+        });
+    });
+    return new Promise((resolve) => server.listen(EXPO_PORT, "127.0.0.1", () => resolve({ server, messages })));
+};
+
 const results = [];
 const pass = (feature, detail) => { results.push({ ok: true, feature, detail }); };
 
@@ -164,6 +220,8 @@ const waitForServer = async () => {
 (async () => {
     const mongo = await MongoMemoryServer.create();
     const wa = await startWhatsAppGateway();
+    const smtp = await startSmtp();
+    const expo = await startExpo();
     const before = new Set(fs.existsSync(UPLOAD_DIR) ? fs.readdirSync(UPLOAD_DIR) : []);
 
     const server = spawn(process.execPath, [path.join(__dirname, "index.js")], {
@@ -182,6 +240,11 @@ const waitForServer = async () => {
             WHATSAPP_SEND_GAP_MS: "0", // pacing is a gateway concern; keep the suite quick
             REMINDER_WINDOW_HOURS: "24",
             REMINDER_INTERVAL_MINUTES: "0.05", // 3s, so the scan is observable
+            SMTP_HOST: "127.0.0.1",
+            SMTP_PORT: String(SMTP_PORT),
+            SMTP_FROM: "tm@example.test",
+            EXPO_PUSH_URL: `http://127.0.0.1:${EXPO_PORT}`,
+            JOB_POLL_MS: "200",
             NODE_ENV: "test",
         },
         stdio: ["ignore", "pipe", "pipe"],
@@ -194,6 +257,8 @@ const waitForServer = async () => {
     const cleanup = async () => {
         server.kill();
         wa.server.close();
+        smtp.server.close();
+        expo.server.close();
         await mongo.stop();
         // remove only what this run uploaded
         if (fs.existsSync(UPLOAD_DIR)) {
@@ -1710,6 +1775,154 @@ const waitForServer = async () => {
         assert.strictEqual((await call("PUT", `/api/tasks/${dragged._id}/status`, { token: M, body: { status: "In Review" } })).status, 400, "In Review is never a drop target; it comes from Completed");
         assert.strictEqual((await call("PUT", `/api/tasks/${dragged._id}/status`, { token: O, body: { status: "In Progress" } })).status, 403, "and you cannot drag someone else's card");
         pass("Search, calendar, saved filters, board", "scoped search over 4 kinds, calendar feed (tasks, project deadlines, projected repeats), private capped saved filters, board ordering + drag rules");
+
+        // ---------- 6. NOTIFICATION ENGINE: preferences, email, push, queue ----------
+        const waitFor = async (probe, ms = 12000) => {
+            for (let waited = 0; waited < ms; waited += 250) {
+                const hit = probe();
+                if (hit) return hit;
+                await sleep(250);
+            }
+            return null;
+        };
+        const p6_inbox = async (token) => (await call("GET", "/api/notifications?limit=100", { token })).body.notifications;
+
+        const p6_x = await signUp({ name: "Xena Notif", email: "xena@example.test", password: "pw123456", phone: "98765 22222" });
+        const p6_y = await signUp({ name: "Yuri Notif", email: "yuri@example.test", password: "pw123456" });
+        const X = p6_x.token, Y = p6_y.token;
+        const assignTo = (title, people, extra = {}) => mk({ title, assignedTo: people, dueDate: day(8), ...extra });
+
+        // preferences: the table, its defaults and its validation
+        assert.strictEqual((await call("GET", "/api/notifications/preferences")).status, 401);
+        const prefs0 = (await call("GET", "/api/notifications/preferences", { token: X })).body;
+        assert.strictEqual(prefs0.events.length, 14);
+        const ev = (table, key) => table.events.find((e) => e.key === key);
+        assert.deepStrictEqual([ev(prefs0, "assigned").whatsapp, ev(prefs0, "assigned").email, ev(prefs0, "mention").whatsapp, ev(prefs0, "overdue").email], [true, false, false, true], "spec defaults");
+        assert.deepStrictEqual(prefs0.channels, { whatsapp: true, email: true, push: true });
+        assert.deepStrictEqual(prefs0.availability, { whatsapp: { configured: true, hasPhone: true }, email: { configured: true }, push: { devices: 0 } });
+        assert.strictEqual((await call("GET", "/api/notifications/preferences", { token: Y })).body.availability.whatsapp.hasPhone, false, "availability says when a channel has nothing behind it");
+        for (const bad of [{ events: { nope: { email: true } } }, { events: { assigned: { sms: true } } }, { events: { assigned: { email: "yes" } } }, { channels: { inApp: false } }, { channels: { email: 0 } }]) {
+            assert.strictEqual((await call("PUT", "/api/notifications/preferences", { token: X, body: bad })).status, 400, `rejects ${JSON.stringify(bad)}`);
+        }
+
+        // email: off by default for "assigned", on after opting in, gone after the master switch
+        await assignTo("Email default off", [p6_x._id]);
+        await sleep(1500);
+        assert.ok(!smtp.mails.some((m) => /Email default off/.test(m.subject)), "no email for an event the person has not opted into");
+        const optIn = (await call("PUT", "/api/notifications/preferences", { token: X, body: { events: { assigned: { email: true } } } })).body;
+        assert.strictEqual(ev(optIn, "assigned").email, true);
+        assert.strictEqual(ev((await call("GET", "/api/notifications/preferences", { token: X })).body, "assigned").email, true, "saved");
+        await assignTo("Email opted in", [p6_x._id]);
+        const sentMail = await waitFor(() => smtp.mails.find((m) => /Email opted in/.test(m.subject)));
+        assert.ok(sentMail, "the opted-in email arrives over SMTP");
+        assert.deepStrictEqual(sentMail.to, ["xena@example.test"], "addressed to the assignee");
+        assert.ok(/\/user\/task-details\//.test(sentMail.raw) || /task-details/.test(sentMail.raw), "and links back to the task");
+        await call("PUT", "/api/notifications/preferences", { token: X, body: { channels: { email: false } } });
+        const mailsBefore = smtp.mails.length;
+        await assignTo("Email muted", [p6_x._id]);
+        await sleep(1500);
+        assert.strictEqual(smtp.mails.length, mailsBefore, "the master switch silences email even for an opted-in event");
+        assert.ok((await p6_inbox(X)).some((n) => n.title.includes("Email muted")), "...but the in-app alert still lands");
+        assert.strictEqual(ev((await call("GET", "/api/notifications/preferences", { token: X })).body, "assigned").email, true, "the per-event choice is remembered while muted");
+        await call("PUT", "/api/notifications/preferences", { token: X, body: { channels: { email: true } } });
+
+        // WhatsApp: per-event and master switches
+        const waTo = (n) => wa.received.filter((m) => m.to === "919876522222" && m.text.includes(n)).length;
+        await call("PUT", "/api/notifications/preferences", { token: X, body: { events: { assigned: { whatsapp: false } } } });
+        await assignTo("WA event off", [p6_x._id]);
+        await sleep(1500);
+        assert.strictEqual(waTo("WA event off"), 0, "no WhatsApp when that event's WhatsApp is off");
+        assert.ok((await p6_inbox(X)).some((n) => n.title.includes("WA event off")), "in-app unaffected");
+        await call("PUT", "/api/notifications/preferences", { token: X, body: { events: { assigned: { whatsapp: true } } } });
+        await assignTo("WA event on", [p6_x._id]);
+        assert.ok(await waitFor(() => waTo("WA event on") === 1), "WhatsApp flows through the queue when wanted");
+        await call("PUT", "/api/notifications/preferences", { token: X, body: { channels: { whatsapp: false } } });
+        await assignTo("WA master off", [p6_x._id]);
+        await sleep(1500);
+        assert.strictEqual(waTo("WA master off"), 0, "the WhatsApp master switch beats everything");
+        await call("PUT", "/api/notifications/preferences", { token: X, body: { channels: { whatsapp: true } } });
+
+        // push: registration rules and delivery
+        assert.strictEqual((await call("POST", "/api/notifications/push-token", { token: X, body: { token: "not-a-token" } })).status, 400);
+        assert.strictEqual((await call("POST", "/api/notifications/push-token", { token: X, body: { token: "ExponentPushToken[xena-phone]" } })).body.devices, 1);
+        assert.strictEqual((await call("POST", "/api/notifications/push-token", { token: X, body: { token: "ExponentPushToken[xena-phone]" } })).body.devices, 1, "registering twice is one device");
+        assert.strictEqual((await call("POST", "/api/notifications/push-token", { token: Y, body: { token: "ExponentPushToken[xena-phone]" } })).body.devices, 1, "a device that changes hands moves");
+        assert.strictEqual((await call("GET", "/api/notifications/preferences", { token: X })).body.availability.push.devices, 0, "...and stops buzzing for the old owner");
+        await call("POST", "/api/notifications/push-token", { token: X, body: { token: "ExponentPushToken[xena-tablet]" } });
+        await assignTo("Push me", [p6_x._id]);
+        const p6_pushed = await waitFor(() => expo.messages.find((m) => /Push me/.test(m.title)));
+        assert.ok(p6_pushed, "push reaches the Expo service");
+        assert.strictEqual(p6_pushed.to, "ExponentPushToken[xena-tablet]");
+        assert.ok(p6_pushed.data.taskId, "and carries the task id so the app can open it");
+        await call("PUT", "/api/notifications/preferences", { token: X, body: { events: { assigned: { push: false } } } });
+        const pushCount = expo.messages.length;
+        await assignTo("Push off", [p6_x._id]);
+        await sleep(1500);
+        assert.strictEqual(expo.messages.length, pushCount, "per-event push switch is respected");
+        await call("PUT", "/api/notifications/preferences", { token: X, body: { events: { assigned: { push: true } } } });
+        await call("POST", "/api/notifications/push-token", { token: X, body: { token: "ExponentPushToken[dead-phone]" } });
+        await assignTo("Prune dead", [p6_x._id]);
+        let devices = 2;
+        for (let i = 0; i < 20 && devices !== 1; i += 1) {
+            await sleep(300);
+            devices = (await call("GET", "/api/notifications/preferences", { token: X })).body.availability.push.devices;
+        }
+        assert.strictEqual(devices, 1, "a token Expo reports as unregistered is removed");
+        for (let i = 0; i < 7; i += 1) await call("POST", "/api/notifications/push-token", { token: X, body: { token: `ExponentPushToken[bulk-${i}]` } });
+        assert.strictEqual((await call("GET", "/api/notifications/preferences", { token: X })).body.availability.push.devices, 5, "at most five devices");
+        assert.strictEqual((await call("DELETE", "/api/notifications/push-token", { token: X, body: { token: "ExponentPushToken[bulk-6]" } })).status, 200);
+        assert.strictEqual((await call("GET", "/api/notifications/preferences", { token: X })).body.availability.push.devices, 4, "devices can be removed");
+
+        // reassigned: whoever is taken off the task is told
+        const p6_swap = await assignTo("Swap owners", [p6_x._id]);
+        await call("PUT", `/api/tasks/${p6_swap._id}`, { token: A, body: { assignedTo: [p6_y._id] } });
+        const xInbox = await p6_inbox(X);
+        const reassigned = xInbox.find((n) => n.type === "reassigned" && n.title.includes("Swap owners"));
+        assert.ok(reassigned, "the person removed gets a 'reassigned' notification");
+        assert.strictEqual(reassigned.event, "reassigned");
+        assert.ok((await p6_inbox(Y)).some((n) => n.type === "assigned" && n.title.includes("Swap owners")), "the new owner gets 'assigned'");
+
+        // mentions: only people who can open the task, and no double alert
+        const p6_talk = await assignTo("Talk about it", [p6_x._id, p6_y._id]);
+        const mention = await call("POST", `/api/tasks/${p6_talk._id}/comments`, { token: A, body: { text: "@Xena please check the firewall", mentions: [p6_x._id, outsider._id, admin._id, "junk"] } });
+        assert.strictEqual(mention.status, 201);
+        const xn = await p6_inbox(X);
+        assert.ok(xn.some((n) => n.type === "mention" && n.title.includes("Talk about it")), "the mentioned person is notified");
+        assert.ok(!xn.some((n) => n.type === "comment" && n.title.includes("Talk about it")), "...and not also told 'new comment'");
+        assert.ok((await p6_inbox(Y)).some((n) => n.type === "comment" && n.title.includes("Talk about it")), "everyone else gets the normal comment alert");
+        assert.ok(!(await p6_inbox(O)).some((n) => n.title.includes("Talk about it")), "a mention cannot reach someone who cannot open the task");
+        assert.ok(!(await p6_inbox(A)).some((n) => n.type === "mention"), "you cannot mention yourself");
+        const stored = (await call("GET", `/api/tasks/${p6_talk._id}`, { token: A })).body.comments.at(-1);
+        assert.deepStrictEqual(stored.mentions, [p6_x._id], "only the valid mention is stored");
+        assert.strictEqual(waTo("check the firewall"), 0, "mentions are in-app only by default (no WhatsApp)");
+
+        // approved: the person who did the work hears the approval
+        const p6_rev = await assignTo("Needs sign-off", [p6_x._id], { requiresReview: true });
+        await call("PUT", `/api/tasks/${p6_rev._id}/status`, { token: X, body: { status: "Completed" } });
+        assert.strictEqual((await call("GET", `/api/tasks/${p6_rev._id}`, { token: A })).body.status, "In Review");
+        await call("PUT", `/api/tasks/${p6_rev._id}/review`, { token: A, body: { action: "approve" } });
+        const approvals = (await p6_inbox(X)).filter((n) => n.title.includes("Needs sign-off"));
+        assert.ok(approvals.some((n) => n.type === "approved"), "assignee gets 'approved'");
+        assert.ok(!approvals.some((n) => n.type === "status" && n.event === "completed"), "...instead of, not on top of, 'completed'");
+
+        // blocked: marking a task Blocked tells the people on it
+        const p6_blk = await assignTo("Stuck work", [p6_y._id]);
+        await call("PUT", `/api/tasks/${p6_blk._id}/status`, { token: Y, body: { status: "Blocked" } });
+        assert.ok((await p6_inbox(A)).some((n) => n.type === "blocked" && n.title.includes("Stuck work")), "creator hears 'blocked'");
+        const p6_dep = await assignTo("Needs the other", [p6_x._id]);
+        await call("PUT", `/api/tasks/${p6_dep._id}/blocked-by`, { token: A, body: { blockedBy: [p6_blk._id] } });
+        assert.ok((await p6_inbox(X)).some((n) => n.type === "blocked" && n.title.includes("Needs the other")), "linking a blocker tells the assignee");
+
+        // due today vs due tomorrow arrive as different events
+        const p6_today = await assignTo("Due later today", [p6_y._id], { dueDate: new Date(Date.now() + 3600 * 1000).toISOString() });
+        let dueNotice;
+        for (let i = 0; i < 40 && !dueNotice; i += 1) {
+            await sleep(500);
+            dueNotice = (await p6_inbox(Y)).find((n) => n.task && String(n.task._id || n.task) === p6_today._id && n.type === "deadline");
+        }
+        assert.ok(dueNotice, "the scheduler raises a deadline alert");
+        assert.ok(["due_today", "due_tomorrow"].includes(dueNotice.event), "tagged with a due-date event");
+        pass("Notification engine", "preferences (defaults, validation, master switches), email via SMTP, WhatsApp via queue, Expo push (+pruning), reassigned/mention/approved/blocked events");
 
         console.log("\n  FEATURE VERIFICATION\n  " + "=".repeat(74));
         results.forEach((r) => console.log(`  [PASS] ${r.feature.padEnd(28)} ${r.detail}`));

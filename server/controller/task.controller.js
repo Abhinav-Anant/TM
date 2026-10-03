@@ -179,18 +179,41 @@ const spawnNext = async (task) => {
 };
 
 /** Alerts (and the recurring spawn) for a status transition that has already been saved. */
-const afterStatusChange = async (task, previousStatus, actor) => {
+const afterStatusChange = async (task, previousStatus, actor, { approved = false } = {}) => {
     if (previousStatus === task.status) return;
 
     if (task.status === "Completed") {
         await spawnNext(task);
+        const everyone = await completionWatchers(task);
+        const assignees = new Set((task.assignedTo || []).map(String));
+        // An approval is news of its own to the people who did the work; the rest still get "completed".
+        if (approved) {
+            await notify({
+                userIds: [...assignees],
+                actor,
+                type: "approved",
+                task: task._id,
+                title: `Approved: ${task.title}`,
+                message: `${actor.name} approved "${task.title}". It is done.`,
+            });
+        }
         await notify({
-            userIds: await completionWatchers(task),
+            userIds: approved ? everyone.filter((id) => !assignees.has(String(id))) : everyone,
             actor,
             type: "status",
+            event: "completed",
             task: task._id,
             title: `${task.title} is now Completed`,
             message: `${actor.name} moved "${task.title}" from ${previousStatus} to Completed.`,
+        });
+    } else if (task.status === "Blocked") {
+        await notify({
+            userIds: watchersOf(task),
+            actor,
+            type: "blocked",
+            task: task._id,
+            title: `Blocked: ${task.title}`,
+            message: `${actor.name} marked "${task.title}" as blocked.`,
         });
     } else if (task.status === "In Review") {
         await notify({
@@ -698,9 +721,11 @@ const updateTask = async (req, res) => {
 
         // Timeline: one line per thing that actually changed.
         const added = (task.assignedTo || []).map(String).filter((id) => !previousAssignees.includes(id));
+        const removed = previousAssignees.filter((id) => !(task.assignedTo || []).map(String).includes(id));
+        let addedNames = [];
         if (added.length) {
-            const names = (await User.find({ _id: { $in: added } }).select("name").lean()).map((u) => u.name);
-            logActivity(task, req.user, previousAssignees.length ? "reassigned" : "assigned", `assigned the task to ${names.join(", ")}`);
+            addedNames = (await User.find({ _id: { $in: added } }).select("name").lean()).map((u) => u.name);
+            logActivity(task, req.user, previousAssignees.length ? "reassigned" : "assigned", `assigned the task to ${addedNames.join(", ")}`);
         }
         if (task.priority !== previousPriority) {
             logActivity(task, req.user, "priority", `changed priority: ${previousPriority} → ${task.priority}`);
@@ -724,6 +749,16 @@ const updateTask = async (req, res) => {
             task: task._id,
             title: `New task: ${task.title}`,
             message: `${req.user.name} assigned you "${task.title}"${dueText(task)}.`,
+        });
+
+        // Whoever was taken off the task hears about it too.
+        await notify({
+            userIds: removed,
+            actor: req.user,
+            type: "reassigned",
+            task: task._id,
+            title: `Reassigned: ${task.title}`,
+            message: `${req.user.name} reassigned "${task.title}"` + (addedNames.length ? ` to ${addedNames.join(", ")}.` : " and it is no longer yours."),
         });
 
         await notify({
@@ -876,7 +911,7 @@ const reviewTask = async (req, res) => {
             markCompleted(task);
             logActivity(task, req.user, "completed", "approved and completed the task");
             await task.save();
-            await afterStatusChange(task, "In Review", req.user);
+            await afterStatusChange(task, "In Review", req.user, { approved: true });
         } else {
             const note = String(req.body.note || "").trim().slice(0, 2000);
             task.status = "In Progress";
@@ -920,12 +955,33 @@ const addComment = async (req, res) => {
             return res.status(403).json({ message: "Not authorized to comment on this task" });
         }
 
-        task.comments.push({ user: req.user._id, text });
+        // @mentions come from the client's picker as ids. Only people who can open this task count:
+        // mentioning someone must never be a way to push a task's title and text to a person who may not see it.
+        const mentioned = [];
+        const wanted = [...new Set((Array.isArray(req.body.mentions) ? req.body.mentions : []).map(String))]
+            .filter((id) => mongoose.isValidObjectId(id) && id !== String(req.user._id)).slice(0, 10);
+        if (wanted.length) {
+            for (const person of await User.find({ _id: { $in: wanted } }).select("role memberships")) {
+                if (await canAccessTask(person, task)) mentioned.push(String(person._id));
+            }
+        }
+
+        task.comments.push({ user: req.user._id, text, mentions: mentioned });
         logActivity(task, req.user, "comment", "added a comment");
         await task.save();
 
         await notify({
-            userIds: watchersOf(task),
+            userIds: mentioned,
+            actor: req.user,
+            type: "mention",
+            task: task._id,
+            title: `${req.user.name} mentioned you on ${task.title}`,
+            message: `${req.user.name}: ${text.slice(0, 140)}`,
+        });
+
+        // Someone who was just @mentioned does not also get the generic "new comment".
+        await notify({
+            userIds: watchersOf(task).filter((id) => !mentioned.includes(String(id))),
             actor: req.user,
             type: "comment",
             task: task._id,

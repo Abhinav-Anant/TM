@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "node server/test.smoke.js",
+    "test": "node server/test.smoke.js && node server/test.jobs.js",
     "start": "node server/index.js",
     "dev": "nodemon server/index.js",
     "build": "npm install && npm install --prefix client && npm run build --prefix client",
@@ -23,7 +23,8 @@
     "jsonwebtoken": "^9.0.2",
     "mongodb": "^6.15.0",
     "mongoose": "^8.13.1",
-    "multer": "^1.4.5-lts.2"
+    "multer": "^1.4.5-lts.2",
+    "nodemailer": "^10.0.13"
   },
   "devDependencies": {
     "mongodb-memory-server": "^11.2.0",
