@@ -14,6 +14,7 @@ import ViewTaskDetails from './pages/User/ViewTaskDetails';
 import CalendarView from './pages/CalendarView';
 import MyWork from './pages/MyWork';
 import Board from './pages/Board';
+import Reports from './pages/Reports';
 import Projects from './pages/Projects/Projects';
 import ProjectDetail from './pages/Projects/ProjectDetail';
 import Leads from './pages/Sales/Leads';
@@ -44,6 +45,11 @@ const App = () => {
                 <Route path="/admin/create-task" element={<CreateTask />} />
                 <Route path="/admin/users" element={<ManageUsers />} />
                 <Route path="/admin/departments" element={<ManageDepartments />} />
+              </Route>
+
+              {/* Reports: admin = company, head = their department. The API refuses members. */}
+              <Route element={<PrivateRoute allowedRoles={['admin', 'head']} />}>
+                <Route path="/reports" element={<Reports />} />
               </Route>
 
               {/* Head of Department Routes (Protected).

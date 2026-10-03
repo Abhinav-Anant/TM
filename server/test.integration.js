@@ -1924,6 +1924,134 @@ const waitForServer = async () => {
         assert.ok(["due_today", "due_tomorrow"].includes(dueNotice.event), "tagged with a due-date event");
         pass("Notification engine", "preferences (defaults, validation, master switches), email via SMTP, WhatsApp via queue, Expo push (+pruning), reassigned/mention/approved/blocked events");
 
+        // ---------- 7. REPORTS ----------
+        const p7_get = (token, path) => call("GET", `/api/reports/${path}`, { token });
+        const p7_file = async (token, path) => {
+            const response = await fetch(`${BASE}/api/reports/${path}`, { headers: { Authorization: `Bearer ${token}` } });
+            return { status: response.status, headers: response.headers, buffer: Buffer.from(await response.arrayBuffer()) };
+        };
+
+        // a small world with known numbers: one department, a head, two employees
+        const p7_head = await call("POST", "/api/auth/register", { body: { name: "Rhea Reports", email: "rhea@example.test", password: "pw123456", adminInviteToken: HEAD_TOKEN } });
+        const RH = p7_head.body.token;
+        const p7_dept = (await call("POST", "/api/departments", { token: A, body: { name: "Reports Dept" } })).body;
+        const p7_deptId = p7_dept._id || p7_dept.department._id;
+        await call("POST", `/api/departments/${p7_deptId}/members`, { token: A, body: { userId: p7_head.body._id, head: true } });
+        const p7_e1 = await signUp({ name: "Eli One", email: "eli@example.test", password: "pw123456" });
+        const p7_e2 = await signUp({ name: "Eva Two", email: "eva@example.test", password: "pw123456" });
+        for (const e of [p7_e1, p7_e2]) await call("POST", `/api/departments/${p7_deptId}/members`, { token: A, body: { userId: e._id } });
+        const p7_project = (await call("POST", "/api/projects", { token: A, body: { name: "=HYPERLINK(\"http://evil.example\")", department: p7_deptId, manager: p7_head.body._id } })).body.project;
+
+        const p7_mk = (assignee, over) => mk({ assignedTo: [assignee._id], todoChecklist: [], ...over });
+        const p7_t1 = await p7_mk(p7_e1, { title: "Done on time", dueDate: day(2), project: p7_project._id });
+        const p7_t2 = await p7_mk(p7_e1, { title: "Done late", dueDate: day(-3) });
+        const p7_t3 = await p7_mk(p7_e1, { title: "Open and overdue", dueDate: day(-2), project: p7_project._id });
+        const p7_t4 = await p7_mk(p7_e2, { title: "Open and fine", dueDate: day(5), project: p7_project._id });
+        const p7_t5 = await p7_mk(p7_e2, { title: "Stuck", dueDate: day(6) });
+        const p7_t6 = await p7_mk(p7_e2, { title: "Scrapped", dueDate: day(6) });
+        await call("PUT", `/api/tasks/${p7_t1._id}/status`, { token: A, body: { status: "Completed" } });
+        await call("PUT", `/api/tasks/${p7_t2._id}/status`, { token: A, body: { status: "Completed" } });
+        await call("PUT", `/api/tasks/${p7_t5._id}/status`, { token: A, body: { status: "Blocked" } });
+        await call("PUT", `/api/tasks/${p7_t6._id}/status`, { token: A, body: { status: "Cancelled" } });
+        assert.ok(p7_t3 && p7_t4);
+
+        // who may read reports
+        assert.strictEqual((await p7_get(undefined, "tasks")).status, 401);
+        assert.strictEqual((await p7_get(M, "tasks")).status, 403, "employees have no reports");
+        assert.strictEqual((await p7_get(A, "nonsense")).status, 404, "unknown report");
+
+        // Task report, as the department head: only their department's tasks
+        const p7_metric = (r, name) => r.body.rows.find((x) => x.metric === name).count;
+        const p7_tasks = await p7_get(RH, "tasks");
+        assert.strictEqual(p7_tasks.status, 200);
+        assert.deepStrictEqual(
+            ["Created", "Completed", "Open", "Overdue", "Blocked"].map((m) => p7_metric(p7_tasks, m)),
+            [6, 2, 3, 1, 1],
+            "task report: created 6, completed 2, open 3 (cancelled excluded), overdue 1, blocked 1");
+        assert.strictEqual(p7_tasks.body.trend.reduce((n, d) => n + d.created, 0), 6, "the per-day trend adds up to the same created total");
+        assert.ok(p7_tasks.body.trend.length >= 30 && p7_tasks.body.trend.length <= 31, "one row per day of the default 30-day window");
+        const p7_adminTasks = await p7_get(A, "tasks");
+        assert.ok(p7_metric(p7_adminTasks, "Created") > 6, "an admin sees the whole company");
+
+        // date range: created/completed follow it, open/overdue/blocked are "right now"
+        const p7_past = await p7_get(RH, "tasks?from=2024-01-01&to=2024-03-01");
+        assert.deepStrictEqual(["Created", "Completed"].map((m) => p7_metric(p7_past, m)), [0, 0], "nothing was created in 2024");
+        assert.strictEqual(p7_metric(p7_past, "Open"), 3, "open is current state, whatever the range");
+        for (const bad of ["from=junk", "to=2026-02-31", "from=2026-10-08&to=2026-10-01", "from=2020-01-01&to=2026-10-01"]) {
+            assert.strictEqual((await p7_get(RH, `tasks?${bad}`)).status, 400, `rejects ${bad}`);
+        }
+
+        // Employee report
+        const p7_emp = await p7_get(RH, "employees");
+        const p7_row = (name) => p7_emp.body.rows.find((r) => r.name === name);
+        assert.deepStrictEqual(
+            { a: p7_row("Eli One").assigned, c: p7_row("Eli One").completed, t: p7_row("Eli One").onTime, r: p7_row("Eli One").onTimeRate, o: p7_row("Eli One").open, v: p7_row("Eli One").overdue },
+            { a: 3, c: 2, t: 1, r: 50, o: 1, v: 1 },
+            "Eli: assigned 3, completed 2, one on time (50%), one open and overdue");
+        assert.deepStrictEqual(
+            { a: p7_row("Eva Two").assigned, c: p7_row("Eva Two").completed, r: p7_row("Eva Two").onTimeRate, o: p7_row("Eva Two").open, v: p7_row("Eva Two").overdue },
+            { a: 3, c: 0, r: null, o: 2, v: 0 },
+            "Eva: nothing finished, so no on-time rate (null, not 0%); cancelled is not open");
+        assert.ok(!p7_emp.body.rows.some((r) => r.name === "Dan Dash"), "a head's employee report holds only their department");
+        assert.ok(p7_row("Eli One").departments.includes("Reports Dept"));
+        assert.ok((await p7_get(A, "employees")).body.rows.some((r) => r.name === "Dan Dash"), "an admin's holds everyone");
+        assert.strictEqual(p7_emp.body.totals.assigned, p7_emp.body.rows.reduce((n, r) => n + r.assigned, 0), "totals row adds up");
+
+        // Department report
+        const p7_dep = await p7_get(RH, "departments");
+        assert.strictEqual(p7_dep.body.rows.length, 1, "a head sees only their own department");
+        assert.deepStrictEqual(
+            { open: p7_dep.body.rows[0].open, completed: p7_dep.body.rows[0].completed, overdue: p7_dep.body.rows[0].overdue, blocked: p7_dep.body.rows[0].blocked },
+            { open: 3, completed: 2, overdue: 1, blocked: 1 },
+            "department: tasks count through their assignees' membership");
+        const p7_adminDep = (await p7_get(A, "departments")).body.rows;
+        assert.ok(p7_adminDep.length > 1 && p7_adminDep.some((r) => r.name === "No department"), "an admin sees every department plus the unassigned bucket");
+
+        // Project report, equal to the project dashboard
+        const p7_proj = await p7_get(RH, "projects");
+        const p7_projRow = p7_proj.body.rows.find((r) => r.name.includes("HYPERLINK"));
+        assert.deepStrictEqual(
+            { open: p7_projRow.open, completed: p7_projRow.completed, overdue: p7_projRow.overdue, progress: p7_projRow.progress },
+            { open: 2, completed: 1, overdue: 1, progress: 33 },
+            "project: 3 tasks, one done, one overdue, 33% progress");
+        assert.strictEqual(p7_projRow.manager, "Rhea Reports");
+        assert.ok(!(await p7_get(RH, "projects")).body.rows.some((r) => r.name === "Website Development"), "a head only sees projects they may open");
+
+        // export: CSV and Excel carry the same table
+        const p7_csv = await p7_file(RH, "employees?format=csv");
+        assert.strictEqual(p7_csv.status, 200);
+        assert.ok(/text\/csv/.test(p7_csv.headers.get("content-type")) && /attachment; filename=".*\.csv"/.test(p7_csv.headers.get("content-disposition")));
+        const p7_csvText = p7_csv.buffer.toString("utf8");
+        assert.ok(p7_csvText.startsWith("\uFEFFEmployee,Email,Departments,Assigned"), "header row, with BOM");
+        assert.ok(/Eli One,eli@example.test,Reports Dept,3,2,1,50,1,1/.test(p7_csvText), "a data row matches the screen");
+        assert.ok(/\r\nTotal,/.test(p7_csvText), "and the totals row is there");
+        const p7_projCsv = (await p7_file(RH, "projects?format=csv")).buffer.toString("utf8");
+        assert.ok(p7_projCsv.includes("\"'=HYPERLINK("), "a project named like a formula is exported as text, not as a live formula");
+        assert.ok(!/(^|\r\n)=HYPERLINK/.test(p7_projCsv), "no cell starts with =");
+
+        const p7_xlsx = await p7_file(RH, "departments?format=xlsx");
+        assert.strictEqual(p7_xlsx.status, 200);
+        assert.ok(/spreadsheetml/.test(p7_xlsx.headers.get("content-type")));
+        assert.strictEqual(p7_xlsx.buffer.slice(0, 2).toString(), "PK", "a real .xlsx (zip) file");
+        const p7_wb = new (require("exceljs").Workbook)();
+        await p7_wb.xlsx.load(p7_xlsx.buffer);
+        const p7_sheet = p7_wb.worksheets[0];
+        assert.deepStrictEqual(p7_sheet.getRow(1).values.slice(1), ["Department", "Open", "Completed", "Overdue", "Blocked"], "Excel headers");
+        assert.deepStrictEqual(p7_sheet.getRow(2).values.slice(1), ["Reports Dept", 3, 2, 1, 1], "Excel data row, numbers as numbers");
+        assert.strictEqual((await p7_file(M, "departments?format=xlsx")).status, 403, "files are as protected as the screen");
+
+        // the older "download every task" export: scoped, and survives tasks that have no due date
+        await mk({ title: "No due date here", dueDate: undefined });
+        assert.strictEqual((await p7_file(A, "export/tasks")).status, 200, "export no longer crashes on a task without a due date");
+        const p7_headExport = await p7_file(RH, "export/tasks");
+        assert.strictEqual(p7_headExport.status, 200, "heads can export too");
+        const p7_exportBook = new (require("exceljs").Workbook)();
+        await p7_exportBook.xlsx.load(p7_headExport.buffer);
+        const p7_titles = p7_exportBook.worksheets[0].getColumn(2).values.slice(2);
+        assert.ok(p7_titles.includes("Done on time") && !p7_titles.includes("No due date here"), "...and only gets their department's tasks");
+        assert.strictEqual((await p7_file(M, "export/tasks")).status, 403, "members still cannot");
+        pass("Reports", "task / employee / department / project reports with exact numbers, scoped for heads, date ranges, CSV (formula-safe) + Excel export");
+
         console.log("\n  FEATURE VERIFICATION\n  " + "=".repeat(74));
         results.forEach((r) => console.log(`  [PASS] ${r.feature.padEnd(28)} ${r.detail}`));
         console.log("  " + "=".repeat(74));

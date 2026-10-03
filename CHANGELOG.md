@@ -103,3 +103,16 @@
   same shape as BullMQ's, confined to one file, if you ever want to swap it.
 - Tests: new `server/test.jobs.js` (queue, concurrent claimers, retries, lock races) runs as part of `npm test`; end-to-end tests use a fake SMTP server
   and a fake Expo service.
+
+### Phase 7 — Reports
+- **Reports** (`/reports`, admin and head; `GET /api/reports/:kind`): Tasks, Employees, Departments, Projects. Admin sees the company, a head sees their
+  own department. Date range (quick presets or from/to, up to a year) in the caller's timezone.
+  - *Tasks*: Created, Completed, Open, Overdue, Blocked, plus a per-day trend on screen.
+  - *Employees*: Assigned, Completed, On time, On-time %, Open, Overdue, with each person's departments. On-time % is blank (not 0%) when nothing was finished.
+  - *Departments*: Open, Completed, Overdue, Blocked. A task counts for its own department, else the departments of the people it is assigned to;
+    an admin also sees a "No department" row.
+  - *Projects*: Open, Completed, Overdue, Progress % - the same numbers as the project dashboard (a snapshot of now, so no date range).
+  Created/completed follow the range; open, overdue and blocked are always the position right now. Cancelled tasks are never open.
+- **Export**: every report downloads as CSV or Excel (`?format=csv|xlsx`) and is the same table as the screen. CSV is UTF-8 with a BOM, and any cell that
+  starts with = + - @ is written as text, so a project named like a spreadsheet formula cannot run when the file is opened.
+- Fixed: the older "download all tasks" Excel export crashed (500) on a task without a due date, and ignored department scope. It is now scoped and heads may use it.

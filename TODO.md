@@ -17,7 +17,7 @@
 - [ ] Calendar: drag a task to a new day to reschedule (not in spec, skipped)
 - [ ] Mobile: Board and calendar views (Phase 8)
 - [x] Phase 6: notification engine + preferences (email via SMTP, Expo push, DB-backed job queue)
-- [ ] Phase 7: reports + export
+- [x] Phase 7: task / employee / department / project reports + CSV and Excel export
 - [ ] Phase 8: mobile
 - [ ] Background jobs: replace `setInterval` reminders with a lock/queue (multi-instance safe)
 - [ ] S3 driver is untested against a real bucket
@@ -28,3 +28,6 @@
 - [ ] Admin Settings area (spec item 31) should also host notification defaults; per-user settings live on the Profile page for now
 - [ ] Email is plain text; add an HTML template if you want branded mail
 - [ ] Live-test email against the real SMTP provider and push on a real device; both are only tested against fakes
+- [ ] Reports: per-day trend is on screen only (the file holds the five task numbers); add a second Excel sheet if people want it
+- [ ] Reports: department report reads tasks into memory (fine for thousands); switch to an aggregation if volumes grow
+- [ ] Company dashboard for admins (spec item 15) is still not built

@@ -1,7 +1,7 @@
 import {
   LuLayoutDashboard, LuClipboardCheck, LuSquarePlus, LuLogOut, LuUsers,
   LuCalendarDays, LuChartColumnBig, LuBuilding2, LuSmartphone,
-  LuTrendingUp, LuContact, LuFolderKanban, LuListTodo, LuColumns3,
+  LuTrendingUp, LuContact, LuFolderKanban, LuListTodo, LuColumns3, LuFileChartColumn,
 } from 'react-icons/lu';
 
 export const SIDE_MENU_DATA = [
@@ -46,6 +46,12 @@ export const SIDE_MENU_DATA = [
     label: "Calendar",
     icon: LuCalendarDays,
     path: "/calendar",
+  },
+  {
+    id: "05r",
+    label: "Reports",
+    icon: LuFileChartColumn,
+    path: "/reports",
   },
   {
     id: "05",
@@ -103,6 +109,7 @@ export const SIDE_MENU_HEAD_DATA = [
   { id: "03b", label: "My Work", icon: LuListTodo, path: "/my-work" },
   { id: "03c", label: "Board", icon: LuColumns3, path: "/board" },
   { id: "04", label: "Calendar", icon: LuCalendarDays, path: "/calendar" },
+  { id: "05r", label: "Reports", icon: LuFileChartColumn, path: "/reports" },
   { id: "05", label: "Analytics", icon: LuChartColumnBig, path: "/analytics" },
   { id: "05a", label: "Sales", icon: LuTrendingUp, path: "/sales", module: "sales" },
   { id: "05b", label: "Leads", icon: LuContact, path: "/sales/leads", module: "leads" },

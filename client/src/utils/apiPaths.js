@@ -86,6 +86,7 @@ export const API_PATHS = {
         DELETE: (id) => `/api/notifications/${id}`,
     },
     REPORTS: {
+        BASE: '/api/reports', // /:kind = tasks | employees | departments | projects; ?from&to&format=csv|xlsx
         EXPORT_TASKS: '/api/reports/export/tasks',
         EXPORT_USERS: '/api/reports/export/users'
     },

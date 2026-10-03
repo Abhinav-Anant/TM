@@ -40,4 +40,43 @@ const computeRemindAt = (dueDate, reminder) => {
     return new Date(new Date(dueDate).getTime() - minutes * MINUTE);
 };
 
-module.exports = { DAY, MINUTE, dayBounds, REMINDER_TYPES, reminderError, computeRemindAt };
+const MAX_REPORT_DAYS = 366;
+
+/**
+ * A report's date range, in the caller's timezone. `from` / `to` are calendar days ("2026-10-01"), and
+ * `to` is inclusive (it runs to the end of that day). Defaults to the last 30 days. Returns { from, to }
+ * as Dates, or { error }.
+ */
+const parseRange = (query = {}, tzOffset = 0, now = new Date()) => {
+    const offset = Number.isFinite(tzOffset) ? tzOffset : 0;
+    const dayStart = (text) => {
+        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(text));
+        if (!m) return null;
+        const t = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+        // Reject 2026-02-31 style dates that JS would silently roll over.
+        return new Date(t).getUTCDate() === Number(m[3]) ? new Date(t + offset * MINUTE) : null;
+    };
+
+    let to;
+    if (query.to) {
+        const start = dayStart(query.to);
+        if (!start) return { error: "to must be a date like 2026-10-31" };
+        to = new Date(start.getTime() + DAY - 1);
+    } else {
+        to = new Date(dayBounds(offset, now).end.getTime() - 1);
+    }
+
+    let from;
+    if (query.from) {
+        from = dayStart(query.from);
+        if (!from) return { error: "from must be a date like 2026-10-01" };
+    } else {
+        from = new Date(to.getTime() + 1 - 30 * DAY);
+    }
+
+    if (from > to) return { error: "from cannot be after to" };
+    if ((to - from) / DAY > MAX_REPORT_DAYS) return { error: `Pick a range of at most ${MAX_REPORT_DAYS} days` };
+    return { from, to };
+};
+
+module.exports = { DAY, MINUTE, dayBounds, parseRange, REMINDER_TYPES, reminderError, computeRemindAt };

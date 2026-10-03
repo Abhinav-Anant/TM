@@ -33,6 +33,45 @@ const { nextDueDate, RECURRENCES } = require("./utils/recurrence.js");
     assert.deepStrictEqual(occurrencesBetween(new Date("2026-12-01T00:00:00Z"), "weekly", from, to), [], "a series that starts after the window shows nothing");
 }
 
+// --- report ranges and CSV export ------------------------------------------------
+{
+    const { parseRange } = require("./utils/workTime.js");
+    const { neutralise, toCsv } = require("./utils/reportFormats.js");
+    const now = new Date("2026-10-07T10:00:00Z");
+
+    const def = parseRange({}, 0, now);
+    assert.strictEqual(def.to.toISOString(), "2026-10-07T23:59:59.999Z", "defaults to the end of today");
+    assert.strictEqual(def.from.toISOString(), "2026-09-08T00:00:00.000Z", "...and the 30 days before it");
+
+    const r = parseRange({ from: "2026-10-01", to: "2026-10-07" }, -330, now);
+    assert.strictEqual(r.from.toISOString(), "2026-09-30T18:30:00.000Z", "from is local midnight (IST)");
+    assert.strictEqual(r.to.toISOString(), "2026-10-07T18:29:59.999Z", "to is inclusive: the end of that local day");
+    assert.strictEqual(parseRange({ from: "2026-10-07", to: "2026-10-07" }, 0, now).error, undefined, "a single day is a valid range");
+
+    assert.ok(parseRange({ from: "nope" }, 0, now).error, "junk from");
+    assert.ok(parseRange({ to: "2026-13-40" }, 0, now).error, "impossible date");
+    assert.ok(parseRange({ to: "2026-02-31" }, 0, now).error, "a date JS would roll over is refused");
+    assert.ok(parseRange({ from: "2026-10-08", to: "2026-10-01" }, 0, now).error, "from after to");
+    assert.ok(parseRange({ from: "2024-01-01", to: "2026-10-01" }, 0, now).error, "longer than a year");
+    assert.ok(parseRange({ from: "2025-10-01", to: "2026-09-30" }, 0, now).error === undefined, "exactly a year is allowed");
+
+    // spreadsheet formulas typed into names must not run when the CSV is opened
+    for (const evil of ["=HYPERLINK(\"http://x\")", "+1+1", "-2+3", "@SUM(A1)", "\tcmd", "\rcmd"]) {
+        assert.strictEqual(neutralise(evil), `'${evil}`, `neutralises ${JSON.stringify(evil)}`);
+    }
+    assert.strictEqual(neutralise("Normal"), "Normal");
+    assert.strictEqual(neutralise("5 - 3"), "5 - 3", "only a LEADING operator is dangerous");
+    assert.strictEqual(neutralise(42), 42, "numbers pass through");
+
+    const csv = toCsv({
+        columns: [{ key: "name", header: "Name" }, { key: "n", header: "Count" }],
+        rows: [{ name: "Doe, Jane", n: 2 }, { name: 'Say "hi"', n: 0 }, { name: "=EVIL()", n: null }],
+        totals: { name: "Total", n: 2 },
+    });
+    assert.ok(csv.startsWith("\uFEFF"), "BOM so Excel reads UTF-8");
+    assert.deepStrictEqual(csv.slice(1).trim().split("\r\n"), ["Name,Count", '"Doe, Jane",2', '"Say ""hi""",0', "'=EVIL(),", "Total,2"], "quotes, commas, formulas, null and totals");
+}
+
 // --- notification preferences ---------------------------------------------------
 {
     const { EVENTS, eventFor, wants, describe, mergePrefs } = require("./utils/notificationPrefs.js");
