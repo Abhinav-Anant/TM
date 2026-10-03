@@ -10,6 +10,7 @@ import TaskComments from '../../components/TaskComments';
 import { categoryColor, statusChip, priorityChip, SETTABLE_STATUS_DATA } from '../../utils/data';
 import { TagChips, WaitingBanner, WatchButton, Subtasks, BlockedBy, ActivityTimeline, TimeTracker } from '../../components/TaskExtras';
 import { reminderLabel } from '../../utils/helper';
+import { LuPaperclip } from 'react-icons/lu';
 import { UserContext } from '../../context/userContext';
 import { LuSquareArrowUpRight, LuTriangleAlert, LuCheck, LuRepeat } from 'react-icons/lu';
 import toast from 'react-hot-toast';
@@ -20,6 +21,7 @@ const ViewTaskDetails = () => {
   const [task, setTask] = useState(null);
   const [reviewNote, setReviewNote] = useState("");
   const [reviewing, setReviewing] = useState(false);
+  const [attaching, setAttaching] = useState(false);
 
   // The server re-checks permission; canReview only decides whether to show the buttons.
   const review = async (action) => {
@@ -59,6 +61,28 @@ const ViewTaskDetails = () => {
       await getTaskDetailsById();
     } catch (error) {
       toast.error(error.response?.data?.message || "That did not go through.");
+    }
+  };
+
+  // Pick files -> upload them -> attach them to this task. Anyone who can open the task may.
+  const addFiles = async (event) => {
+    const files = [...(event.target.files || [])];
+    event.target.value = '';
+    if (!files.length) return;
+    setAttaching(true);
+    try {
+      const form = new FormData();
+      files.forEach((file) => form.append('files', file));
+      const { data } = await axiosInstance.post(API_PATHS.TASKS.UPLOAD_ATTACHMENTS, form, {
+        headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000,
+      });
+      const attached = await axiosInstance.post(API_PATHS.TASKS.ATTACH(id), { urls: data.urls });
+      setTask((prev) => ({ ...prev, attachments: attached.data.attachments }));
+      toast.success(files.length === 1 ? 'File added' : 'Files added');
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Could not add the file.');
+    } finally {
+      setAttaching(false);
     }
   };
 
@@ -169,16 +193,21 @@ const ViewTaskDetails = () => {
 
             <Subtasks task={task} onChange={(subtasks) => setTask((prev) => ({ ...prev, subtasks }))} />
 
-            {task.attachments?.length > 0 && (
-              <div className="mt-8">
-                <h3 className="font-display text-sm text-beam mb-3">Attachments</h3>
-                <div className="space-y-2">
-                  {task.attachments.map((link, index) => (
-                    <Attachment key={`link_${index}`} link={link} />
-                  ))}
-                </div>
+            <div className="mt-8">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-display text-sm text-beam">Attachments</h3>
+                <label className={`btn btn-sm cursor-pointer ${attaching ? 'opacity-60 pointer-events-none' : ''}`}>
+                  <LuPaperclip /> {attaching ? 'Uploading' : 'Add files'}
+                  <input type="file" multiple className="sr-only" onChange={addFiles} disabled={attaching} />
+                </label>
               </div>
-            )}
+              <div className="space-y-2">
+                {(task.attachments || []).map((link, index) => (
+                  <Attachment key={`link_${index}`} link={link} />
+                ))}
+                {!task.attachments?.length && <p className="text-sm text-dusk">No files yet.</p>}
+              </div>
+            </div>
 
             <ActivityTimeline activity={task.activity} />
 

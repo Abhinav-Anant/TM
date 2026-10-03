@@ -3,6 +3,8 @@ const Task = require('../model/task.model.js');
 const User = require('../model/user.model.js');
 const { OPEN } = require('../utils/taskStatus.js');
 const { scopeFor, canAccessTask, departmentMemberIds, headedDepartmentIds } = require('../utils/scope.js');
+const Project = require('../model/project.model.js');
+const Department = require('../model/department.model.js');
 const { logActivity } = require('../utils/activity.js');
 const { dayBounds, MINUTE } = require('../utils/workTime.js');
 
@@ -68,6 +70,23 @@ const getManagerDashboard = async (req, res) => {
             .sort((a, b) => b.overdue - a.overdue || b.open - a.open || a.name.localeCompare(b.name));
 
         res.json({ totals, employees });
+    } catch (error) { fail(res, error); }
+};
+
+// GET /api/tasks/company-dashboard - the owner's one-glance numbers. Admin only (route-gated).
+const getCompanyDashboard = async (req, res) => {
+    try {
+        const [counts, employees, departments, projects, activeProjects] = await Promise.all([
+            headlineCounts({}, dayBounds(tzOffsetOf(req))),
+            User.countDocuments({}),
+            Department.countDocuments({}),
+            Project.countDocuments({}),
+            Project.countDocuments({ status: "Active" }),
+        ]);
+        res.json({
+            employees, departments, projects, activeProjects,
+            openTasks: counts.open, overdueTasks: counts.overdue, completedThisWeek: counts.completedThisWeek,
+        });
     } catch (error) { fail(res, error); }
 };
 
@@ -163,4 +182,4 @@ const stopTimer = async (req, res) => {
     } catch (error) { fail(res, error); }
 };
 
-module.exports = { getMyDashboard, getManagerDashboard, setTime, startTimer, stopTimer, headlineCounts };
+module.exports = { getMyDashboard, getManagerDashboard, getCompanyDashboard, setTime, startTimer, stopTimer, headlineCounts };

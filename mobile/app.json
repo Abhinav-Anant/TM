@@ -14,7 +14,10 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "com.taskmanager.app"
+      "package": "com.taskmanager.app",
+      "permissions": [
+        "CAMERA"
+      ]
     },
     "web": {
       "bundler": "metro"
@@ -23,7 +26,15 @@
       "apiUrl": "http://localhost:8000"
     },
     "plugins": [
-      "expo-asset"
+      "expo-asset",
+      "expo-notifications",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Allow Task Manager to use the camera so you can attach photos to tasks.",
+          "photosPermission": "Allow Task Manager to read your photos so you can attach them to tasks."
+        }
+      ]
     ]
   }
 }

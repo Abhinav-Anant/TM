@@ -116,3 +116,22 @@
 - **Export**: every report downloads as CSV or Excel (`?format=csv|xlsx`) and is the same table as the screen. CSV is UTF-8 with a BOM, and any cell that
   starts with = + - @ is written as text, so a project named like a spreadsheet formula cannot run when the file is opened.
 - Fixed: the older "download all tasks" Excel export crashed (500) on a task without a due date, and ignored department scope. It is now scoped and heads may use it.
+
+### Phase 8 — Mobile
+- **App rebuilt around the spec's navigation**: Home, My Work, Projects, Alerts, Profile. Also: New/Edit task, Task, Project, Calendar,
+  Notification settings, Progress (the old analytics screen). Light theme and the existing login are kept.
+- **Home**: the five numbers, tappable into My Work; managers see team numbers, admins company totals.
+- **My Work**: All / Today / Upcoming / Overdue / Completed, priority and project filters, Quick Add, infinite scroll (the old `limit=100`
+  stopgap is gone), pull to refresh.
+- **Task**: status change, done / review / approve / send back, checklist, subtasks, time tracking with timer, blocked banner, follow,
+  comments with @mentions, attachments from **camera, photo library or any file**, activity timeline. Admin/head can edit.
+- **Create / edit**: only title and an assignee are required; members create for themselves, admin/head assign anyone.
+- **Calendar**: month grid with tasks, project deadlines and projected repeats. **Projects**: list and detail with the same dashboard numbers as the web.
+- **Push**: the phone registers its Expo token after sign-in and removes it on sign-out; tapping a push opens the task. Needs an EAS project
+  id in `app.json` (see `mobile/README.md`). Alerts also poll every 30s and drive the tab badge.
+- **Notification settings** on the phone: master switches and a switch per event and channel.
+- Runs in a browser too (`react-native-web`) for quick checks; `mobile/test/logic.test.js` covers the pure logic and runs in `npm test`.
+- **Server additions for mobile and web**: `POST /api/tasks/:id/attachments` (anyone on the task can attach files *they uploaded*; employees
+  could not attach before), `GET /api/files/:id/link` (5-minute, single-file link so a phone can open a protected file without putting its real
+  token in a URL), and `GET /api/tasks/company-dashboard` (admin: employees, departments, projects, active projects), now on the admin dashboard.
+  The web task page got an **Add files** button.

@@ -6,9 +6,9 @@ const {
     getTags, setWatching, setBlockedBy, addSubtask, updateSubtask, deleteSubtask,
 } = require('../controller/taskExtras.controller.js');
 const {
-    getMyDashboard, getManagerDashboard, setTime, startTimer, stopTimer,
+    getMyDashboard, getManagerDashboard, getCompanyDashboard, setTime, startTimer, stopTimer,
 } = require('../controller/taskWork.controller.js');
-const { uploadAttachments } = require('../controller/file.controller.js');
+const { uploadAttachments, attachFiles } = require('../controller/file.controller.js');
 const {
     getDashboardData, getUserDashboardData,
     getTasks, getTaskById, getCategories, getAnalytics,
@@ -22,6 +22,7 @@ const {
 router.get('/dashboard-data', protect, getDashboardData);
 router.get('/user-dashboard-data', protect, getUserDashboardData);
 router.get('/my-dashboard', protect, getMyDashboard);
+router.get('/company-dashboard', protect, adminOnly, getCompanyDashboard);
 router.get('/manager-dashboard', protect, allowRoles("admin", "head"), getManagerDashboard);
 router.get('/analytics', protect, getAnalytics);
 router.get('/categories', protect, getCategories);
@@ -39,6 +40,7 @@ router.put('/:id/status', protect, updateTaskStatus);
 router.put('/:id/review', protect, reviewTask);
 router.delete('/:id', protect, adminOnly, deleteTask);
 
+router.post('/:id/attachments', protect, attachFiles);
 router.put('/:id/watch', protect, setWatching);
 router.put('/:id/time', protect, setTime);
 router.post('/:id/timer/start', protect, startTimer);

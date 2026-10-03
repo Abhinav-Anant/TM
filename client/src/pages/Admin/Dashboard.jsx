@@ -25,10 +25,15 @@ const Dashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [manager, setManager] = useState(null);
+  const [company, setCompany] = useState(null);
 
   useEffect(() => {
     const load = async () => {
       try {
+        if (user?.role === 'admin') {
+          axiosInstance.get(API_PATHS.TASKS.COMPANY_DASHBOARD, { params: { tzOffset: new Date().getTimezoneOffset() } })
+            .then(({ data }) => setCompany(data)).catch(() => {});
+        }
         axiosInstance.get(API_PATHS.TASKS.MANAGER_DASHBOARD, { params: { tzOffset: new Date().getTimezoneOffset() } })
           .then(({ data }) => setManager(data)).catch(() => {});
         const response = await axiosInstance.get(API_PATHS.TASKS.GET_DASHBOARD_DATA);
@@ -40,7 +45,7 @@ const Dashboard = () => {
       }
     };
     load();
-  }, []);
+  }, [user?.role]);
 
   const d = dashboardData || {};
   const pieData = [
@@ -70,6 +75,22 @@ const Dashboard = () => {
           </div>
         ) : (
           <>
+            {user?.role === 'admin' && (
+              <section aria-label="Company" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  ['Employees', company?.employees],
+                  ['Departments', company?.departments],
+                  ['Projects', company?.projects],
+                  ['Active projects', company?.activeProjects],
+                ].map(([label, value]) => (
+                  <div key={label} className="panel p-5">
+                    <p className="text-[11px] uppercase tracking-wide text-dusk">{label}</p>
+                    <p className="font-display text-3xl num mt-1 text-beam">{value ?? '–'}</p>
+                  </div>
+                ))}
+              </section>
+            )}
+
             <section aria-label="Team headline numbers" className="grid grid-cols-2 lg:grid-cols-6 gap-4">
               {[
                 ['Open tasks', manager?.totals.open, 'text-beam'],

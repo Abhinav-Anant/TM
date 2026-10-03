@@ -2052,6 +2052,60 @@ const waitForServer = async () => {
         assert.strictEqual((await p7_file(M, "export/tasks")).status, 403, "members still cannot");
         pass("Reports", "task / employee / department / project reports with exact numbers, scoped for heads, date ranges, CSV (formula-safe) + Excel export");
 
+        // ---------- 8. MOBILE SUPPORT: company dashboard, member attachments, signed file links ----------
+        // company dashboard
+        assert.strictEqual((await call("GET", "/api/tasks/company-dashboard")).status, 401);
+        assert.strictEqual((await call("GET", "/api/tasks/company-dashboard", { token: M })).status, 403, "members cannot");
+        assert.strictEqual((await call("GET", "/api/tasks/company-dashboard", { token: RH })).status, 403, "heads cannot: it is the owner's view");
+        const p8_co = (await call("GET", "/api/tasks/company-dashboard?tzOffset=0", { token: A })).body;
+        const p8_users = await (async () => (await call("GET", "/api/users", { token: A })).body.length)();
+        assert.ok(p8_co.employees >= p8_users + 1, "employees counts everyone, admins included");
+        assert.ok(p8_co.departments >= 4 && p8_co.projects >= 2 && p8_co.openTasks > 0 && p8_co.overdueTasks >= 1 && p8_co.completedThisWeek >= 1, "all seven numbers come back with sane values");
+        await call("POST", "/api/projects", { token: A, body: { name: "Counted Active", status: "Active" } });
+        const p8_co2 = (await call("GET", "/api/tasks/company-dashboard", { token: A })).body;
+        assert.strictEqual(p8_co2.activeProjects, p8_co.activeProjects + 1, "an Active project shows up in Active projects");
+        assert.strictEqual(p8_co2.projects, p8_co.projects + 1);
+
+        // a member attaches their own upload to a task they work on
+        const p8_task = await mk({ title: "Photo of the site", assignedTo: [member._id], dueDate: day(4) });
+        const p8_up = await uploadFiles(M, [{ name: "site.png", type: "image/png", content: "PNGDATA" }]);
+        assert.strictEqual(p8_up.status, 200);
+        const p8_attach = (token, id, urls) => call("POST", `/api/tasks/${id}/attachments`, { token, body: { urls } });
+        const p8_done = await p8_attach(M, p8_task._id, p8_up.body.urls);
+        assert.strictEqual(p8_done.status, 200, "an employee can attach a file");
+        assert.deepStrictEqual(p8_done.body.attachments, p8_up.body.urls);
+        assert.strictEqual((await p8_attach(M, p8_task._id, p8_up.body.urls)).body.attachments.length, 1, "attaching the same file twice is one attachment");
+        assert.ok((await call("GET", `/api/tasks/${p8_task._id}`, { token: A })).body.activity.some((e) => e.type === "attachment"), "the timeline records it");
+        assert.strictEqual((await call("GET", p8_up.body.urls[0], { token: A })).status, 200, "and the people on the task can open it");
+
+        // ...but not someone else's file, a stranger's task, or a made-up url
+        const p8_other = await uploadFiles(O, [{ name: "private.txt", type: "text/plain", content: "not yours" }]);
+        assert.strictEqual((await p8_attach(M, p8_task._id, p8_other.body.urls)).status, 400, "cannot attach a file someone else uploaded");
+        assert.strictEqual((await p8_attach(M, p8_task._id, ["https://evil.example/x.png"])).status, 400, "only our own files");
+        assert.strictEqual((await p8_attach(M, p8_task._id, [])).status, 400, "nothing to attach");
+        assert.strictEqual((await p8_attach(O, p8_task._id, p8_other.body.urls)).status, 403, "a stranger cannot attach to the task at all");
+        assert.strictEqual((await p8_attach(undefined, p8_task._id, p8_up.body.urls)).status, 401);
+        assert.strictEqual((await p8_attach(M, "not-an-id", p8_up.body.urls)).status, 404);
+        assert.strictEqual((await call("GET", p8_other.body.urls[0], { token: M })).status, 404, "and the failed attempt did not leak the file");
+
+        // signed, short-lived file links for the phone (no Authorization header on an image viewer)
+        const p8_link = await call("GET", `${p8_up.body.urls[0].split("/").slice(0, 4).join("/")}/link`, { token: M });
+        assert.strictEqual(p8_link.status, 200);
+        assert.ok(/\?ft=/.test(p8_link.body.url) && p8_link.body.expiresIn === 300, "a five-minute link");
+        const p8_open = await call("GET", p8_link.body.url);
+        assert.strictEqual(p8_open.status, 200, "the link opens with no session at all");
+        assert.strictEqual(p8_open.text, "PNGDATA", "...and serves the right bytes");
+        const p8_id = p8_up.body.urls[0].split("/")[3];
+        const p8_otherId = p8_other.body.urls[0].split("/")[3];
+        assert.strictEqual((await call("GET", `/api/files/${p8_otherId}?ft=${/ft=(.*)$/.exec(p8_link.body.url)[1]}`)).status, 401, "a link only works for the file it was made for");
+        assert.strictEqual((await call("GET", `/api/files/${p8_id}?ft=garbage`)).status, 401, "garbage tokens are refused");
+        assert.strictEqual((await call("GET", `/api/files/${p8_id}?ft=${M}`)).status, 401, "a normal session token is not a file link");
+        const p8_linkToken = /ft=(.*)$/.exec(p8_link.body.url)[1];
+        assert.strictEqual((await call("GET", "/api/tasks", { token: p8_linkToken })).status, 401, "and a file link is not a session token");
+        assert.strictEqual((await call("GET", `/api/files/${p8_id}/link`, { token: O })).status, 404, "you cannot mint a link to a file you cannot read");
+        assert.strictEqual((await call("GET", `/api/files/${p8_id}/link`)).status, 401);
+        pass("Mobile support", "company dashboard (admin only), members attach their own uploads, 5-minute single-file links");
+
         console.log("\n  FEATURE VERIFICATION\n  " + "=".repeat(74));
         results.forEach((r) => console.log(`  [PASS] ${r.feature.padEnd(28)} ${r.detail}`));
         console.log("  " + "=".repeat(74));

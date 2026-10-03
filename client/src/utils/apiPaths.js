@@ -25,6 +25,8 @@ export const API_PATHS = {
         GET_CATEGORIES: "/api/tasks/categories", // Distinct categories in scope
         GET_TAGS: "/api/tasks/tags", // Distinct tags in scope
         MY_DASHBOARD: "/api/tasks/my-dashboard", // Own counts: overdue, due today, in progress, upcoming, done this week
+        COMPANY_DASHBOARD: "/api/tasks/company-dashboard", // Admin: employees, departments, projects, active projects
+        ATTACH: (taskId) => `/api/tasks/${taskId}/attachments`, // { urls } - attach files you uploaded
         MANAGER_DASHBOARD: "/api/tasks/manager-dashboard", // Admin/head: totals + per-employee table
         TIME: (taskId) => `/api/tasks/${taskId}/time`, // { estimatedMinutes, actualMinutes }
         TIMER_START: (taskId) => `/api/tasks/${taskId}/timer/start`,
