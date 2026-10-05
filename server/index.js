@@ -24,6 +24,7 @@ const projectRoutes = require('./routes/project.route.js');
 const searchRoutes = require('./routes/search.route.js');
 const calendarRoutes = require('./routes/calendar.route.js');
 const savedFilterRoutes = require('./routes/savedFilter.route.js');
+const whatsappRoutes = require('./routes/whatsapp.route.js');
 
 const app = express();
 // Behind a local reverse proxy (nginx), take the client IP from X-Forwarded-For so the
@@ -56,6 +57,7 @@ app.use('/api/projects', projectRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/saved-filters', savedFilterRoutes);
+app.use('/api/whatsapp', whatsappRoutes);
 
 // Uploads are NOT served statically: /api/files/:id checks who is asking.
 
@@ -97,7 +99,7 @@ app.listen(PORT, async () => {
         await require("./model/task.model.js").collection.updateMany({ status: "Pending" }, { $set: { status: "To Do" } });
         console.log(`Server is running on port ${PORT}`);
         console.log(`Email notifications: ${emailEnabled ? "enabled" : "disabled (set SMTP_HOST / SMTP_FROM to enable)"}`);
-        console.log(`WhatsApp notifications: ${whatsappEnabled ? "enabled" : "disabled (set BLASTUP_URL / BLASTUP_API_KEY to enable)"}`);
+        console.log(`WhatsApp notifications: ${whatsappEnabled ? "enabled" : "disabled (set BLASTUP_URL to enable)"}`);
         startWorker();
         startReminders();
     } catch (error) {

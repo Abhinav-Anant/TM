@@ -87,6 +87,14 @@ export const API_PATHS = {
         MARK_ALL_READ: "/api/notifications/read-all",
         DELETE: (id) => `/api/notifications/${id}`,
     },
+    WHATSAPP: {
+        ME: "/api/whatsapp/me",               // GET: { enabled, status, phone, qr }
+        LINK: "/api/whatsapp/me/link",        // POST: start a session, QR follows on ME
+        PAIR: "/api/whatsapp/me/pair",        // POST { phone } -> { code }
+        UNLINK: "/api/whatsapp/me/unlink",    // POST
+        ACCOUNTS: "/api/whatsapp/accounts",   // GET (admin) who has linked
+        SEND: "/api/whatsapp/send",           // POST (admin) { text, userIds | departmentId | everyone }
+    },
     REPORTS: {
         BASE: '/api/reports', // /:kind = tasks | employees | departments | projects; ?from&to&format=csv|xlsx
         EXPORT_TASKS: '/api/reports/export/tasks',

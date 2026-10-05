@@ -2,6 +2,21 @@
 
 ## Unreleased — SOHO redesign
 
+### WhatsApp from everyone's own phone
+- Each employee links their own WhatsApp from **My Profile → Your WhatsApp**: a QR code on a computer, or WhatsApp's
+  pairing code on the phone itself (also in the mobile app's Profile tab). TaskManager creates one gateway account per
+  person behind the scenes and keeps its key encrypted (`WHATSAPP_SECRET`).
+- Alerts go out from the phone of whoever acted: an employee's own phone messages their department heads, a head's
+  messages the admins and the departments they lead, an admin's messages anyone. Everyone else on an alert, and alerts with
+  no actor (reminders, escalations), use the optional company number (`WHATSAPP_COMPANY_EMAIL` or `BLASTUP_API_KEY`), else
+  stay in-app. A phone that drops off falls back to the company number automatically.
+- Admins: **Team → Send WhatsApp** to everyone, a department or chosen people; the Team page shows who has linked.
+- New endpoints under `/api/whatsapp` (`me`, `me/link`, `me/pair`, `me/unlink`, `accounts`, `send`).
+- `deploy/whatsapp/install-blastup.sh` installs the gateway on the app server; `patch-blastup.py` makes it safe for personal
+  phones (no history sync, no stored chats or contacts, no auto-replies, phone keeps its notifications), adds pairing codes,
+  Safe Mode tier 5 and an IST sending window, and binds it to 127.0.0.1. Replaces `safemode-ist.sh` and `bind-loopback.sh`.
+- `BLASTUP_API_KEY` is no longer required; `BLASTUP_URL` alone turns WhatsApp on.
+
 ### Deployment
 - `deploy/server/`: one-command install for a single Ubuntu 24.04 box (firewall, swap, Node 22, local MongoDB 8,
   nginx, Let's Encrypt, systemd service). See `deploy/server/README.md`.

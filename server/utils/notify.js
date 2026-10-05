@@ -1,7 +1,8 @@
 const Notification = require('../model/notification.model.js');
 const User = require('../model/user.model.js');
 const { push } = require('./sse.js');
-const { sendWhatsApp, whatsappEnabled } = require('./whatsapp.js');
+const { sendWhatsApp, whatsappEnabled, companyNumber } = require('./whatsapp.js');
+const { departmentHeadsOf, departmentMemberIds, headedDepartmentIds } = require('./scope.js');
 const { sendEmail, emailEnabled } = require('./email.js');
 const { sendPush } = require('./push.js');
 const { registerJob, enqueue, acquireLock } = require('./jobs.js');
@@ -14,17 +15,37 @@ const CLIENT_URL = process.env.CLIENT_URL || "";
 const SEND_GAP_MS = Number(process.env.WHATSAPP_SEND_GAP_MS ?? 1200);
 
 // ---- delivery jobs: slow or fallible channels run in the queue, never inside a request ----------
-registerJob("whatsapp", async ({ to, text }) => {
-    // The gateway rejects (not queues) sends that come too fast. One shared slot across ALL app
-    // instances: whoever wins it sends, everyone else reschedules for when it frees up.
+registerJob("whatsapp", async ({ to, text, from }) => {
+    // The gateway rejects (not queues) sends that come too fast from one number. One slot per sending
+    // number, shared across ALL app instances: whoever wins it sends, everyone else reschedules.
     if (SEND_GAP_MS > 0) {
-        const slot = await acquireLock("whatsapp-slot", SEND_GAP_MS);
+        const slot = await acquireLock(`whatsapp-slot:${from || "company"}`, SEND_GAP_MS);
         if (!slot.ok) return { retryAt: slot.until };
     }
-    if (!await sendWhatsApp({ to, text })) throw new Error("WhatsApp gateway unreachable or rejected the message");
+    let result = await sendWhatsApp({ to, text, from });
+    // The sender's phone dropped off since this was queued: the company number carries it if there is
+    // one; otherwise the in-app alert already covered it and there is nothing to retry.
+    if (result === "not-linked" && from && companyNumber) result = await sendWhatsApp({ to, text });
+    if (result === "failed") throw new Error("WhatsApp gateway unreachable or rejected the message");
 });
 registerJob("email", async (payload) => { await sendEmail(payload); });
 registerJob("push", async (payload) => { await sendPush(payload); });
+
+/**
+ * Who may get a WhatsApp from this person's own phone: up the chain and down to their own people.
+ * A member reaches their department heads; a head reaches the admins and the departments they lead;
+ * an admin reaches anyone (null). Everyone else on an alert hears from the company number, if any.
+ */
+const whatsappReach = async (sender) => {
+    if (sender.role === "admin") return null;
+    const ids = await departmentHeadsOf([sender._id]);
+    const headed = headedDepartmentIds(sender);
+    if (headed.length || sender.role === "head") {
+        ids.push(...await departmentMemberIds(headed));
+        ids.push(...(await User.find({ role: "admin" }).select("_id").lean()).map((admin) => admin._id));
+    }
+    return new Set(ids.map(String));
+};
 
 /**
  * The single dispatch point for every alert. For each recipient it:
@@ -73,11 +94,18 @@ const notify = async ({ userIds, actor, type, title, message = "", task, event }
     // Everything below is best-effort and off the request path: a missing phone, an unset SMTP host or a
     // dead gateway degrades reach, never delivery of the in-app alert that already landed.
     const link = task ? `${CLIENT_URL}/user/task-details/${task}` : CLIENT_URL;
+    // WhatsApp goes from the actor's own linked phone where whatsappReach allows, else the company number.
+    const sender = whatsappEnabled && actorId
+        ? await User.findById(actorId).select("role memberships waPhone").lean()
+        : null;
+    const reach = sender?.waPhone ? await whatsappReach(sender) : undefined;
     const jobs = [];
     for (const user of users) {
-        if (whatsappEnabled && user.phone && wants(user, ev, "whatsapp")) {
+        const from = reach !== undefined && (reach === null || reach.has(String(user._id))) ? String(sender._id) : null;
+        if (whatsappEnabled && (from || companyNumber) && user.phone && wants(user, ev, "whatsapp")) {
             jobs.push(enqueue("whatsapp", {
                 to: user.phone,
+                from,
                 text: `*${title}*\n\nHi ${user.name},\n${message}` + (link ? `\n\n${link}` : ""),
             }));
         }

@@ -1,166 +1,118 @@
 #!/usr/bin/env bash
 #
-# Installs Blastup as the WhatsApp gateway for TaskManager on spiderdc.
+# Installs Blastup as TaskManager's WhatsApp gateway on the same box (run after deploy/server/install.sh).
+#   sudo bash /opt/taskmanager/deploy/whatsapp/install-blastup.sh
 #
 # Shape, and why:
-#   - Both Blastup processes bind to 127.0.0.1 only. TaskManager is the API's
-#     single client and the dashboard is reached over an SSH tunnel, so ufw stays
-#     at 22/80/443 and nothing new faces the internet.
-#   - Its own Mongo database (wa_platform) on the Mongo already running here.
-#     Separate database, same server - nothing touches the taskmanager data.
-#   - systemd units, not pm2. pm2 was already tried on this box and failed:
-#     systemd's CHASE_SAFE refuses to read a PID file under an unprivileged
-#     user's home. Do not reintroduce it.
+#   - API only, on 127.0.0.1:3001. TaskManager is its single client: it creates one gateway account per
+#     employee and shows the QR / pairing code on their Profile page, so Blastup's own dashboard is not
+#     built or run. Nothing new faces the internet; ufw stays at 22/80/443.
+#   - Patched by patch-blastup.py: no chat history, contacts or incoming messages are stored (people link
+#     their personal phones), no auto-replies, phone keeps its own notifications, pairing-code linking.
+#   - Its own database (wa_platform) on the local MongoDB; Redis is required (Safe Mode's store).
 #
-# Run as root FROM THE PROXMOX CONSOLE - `ssh host "sudo ..."` does not work here.
-#
-# Re-running is safe: it pulls, rebuilds and restarts without touching .env or
-# the linked WhatsApp session.
-
+# Re-running is safe: pulls, re-patches, rebuilds, restarts. .env and linked sessions are kept.
 set -euo pipefail
 
-PREFIX="/opt/blastup"
-REPO="https://github.com/kalpintelligence/Blastup.git"
-SERVICE_USER="aadmin"
+PREFIX=/opt/blastup
+REPO=https://github.com/kalpintelligence/Blastup.git
+HERE="$(cd "$(dirname "$0")" && pwd)"
+TM_ENV=/opt/taskmanager/.env
 
-[ "$(id -u)" -eq 0 ] || { echo "Run as root (Proxmox console)." >&2; exit 1; }
+[ "$(id -u)" -eq 0 ] || { echo "Run as root." >&2; exit 1; }
+systemctl is-active --quiet mongod || { echo "mongod is not running - run deploy/server/install.sh first" >&2; exit 1; }
 
-echo "==> Pre-flight"
-command -v node >/dev/null || { echo "node is required" >&2; exit 1; }
-NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
-[ "$NODE_MAJOR" -ge 18 ] || { echo "Blastup needs Node >= 18 (found $NODE_MAJOR)" >&2; exit 1; }
-systemctl is-active --quiet mongod || { echo "mongod is not running" >&2; exit 1; }
-echo "    node $(node -v), mongod active"
-
-# Blastup wraps the Baileys socket in SafeMode and SafeMode's store is Redis, so
-# every send goes through it - without Redis, sends fail rather than merely
-# degrade. Its in-code fallback to a memory store never fires: that catch only
-# wraps client construction, which succeeds even when nothing is listening.
-echo "==> Redis"
-if ! systemctl is-active --quiet redis-server; then
-    apt-get update -qq
-    apt-get install -y redis-server
-    systemctl enable --now redis-server
-fi
+echo "== Redis (Safe Mode's store - sends fail without it)"
+command -v redis-server >/dev/null || { apt-get update -q; apt-get install -yq redis-server; }
+systemctl enable --now redis-server
 redis-cli ping
 
-echo "==> Fetching source into $PREFIX"
+echo "== source"
+id blastup >/dev/null 2>&1 || useradd --system --home "$PREFIX" --shell /usr/sbin/nologin blastup
+git config --global --add safe.directory "$PREFIX"
 if [ -d "$PREFIX/.git" ]; then
-    git -C "$PREFIX" pull --ff-only
+    git -C "$PREFIX" checkout -q -- server/src
+    git -C "$PREFIX" pull -q --ff-only
 else
-    git clone --depth 1 "$REPO" "$PREFIX"
+    git clone -q --depth 1 "$REPO" "$PREFIX"
 fi
+python3 "$HERE/patch-blastup.py" "$PREFIX"
 
-# Generated once and then left alone - regenerating JWT_SECRET on every run would
-# invalidate the API key TaskManager is holding.
+# Generated once: a new JWT_SECRET would not break API keys, but there is no reason to churn it.
 if [ ! -f "$PREFIX/server/.env" ]; then
-    echo "==> Writing server/.env (first run)"
-    ADMIN_PW="$(openssl rand -base64 18)"
     cat > "$PREFIX/server/.env" <<EOF
 NODE_ENV=production
 PORT=3001
+BIND_HOST=127.0.0.1
 MONGODB_URI=mongodb://127.0.0.1:27017/wa_platform
+REDIS_URL=redis://127.0.0.1:6379
 JWT_SECRET=$(openssl rand -hex 32)
 JWT_EXPIRES_IN=24h
 COOKIE_SECRET=$(openssl rand -hex 32)
 BCRYPT_ROUNDS=12
 ADMIN_USERNAME=admin
-ADMIN_PASSWORD=$ADMIN_PW
+ADMIN_PASSWORD=$(openssl rand -base64 18)
 CLIENT_URL=http://127.0.0.1:3000
 UPLOAD_DIR=./uploads
 MAX_FILE_SIZE=10485760
 SESSION_DIR=./sessions
 RATE_LIMIT_WINDOW_MS=900000
-RATE_LIMIT_MAX=100
-LOGIN_RATE_LIMIT_MAX=5
+RATE_LIMIT_MAX=100000
+LOGIN_RATE_LIMIT_MAX=1000
 ACCOUNT_LOCK_DURATION_MINUTES=30
 LOG_LEVEL=info
+# Personal phones: never store or act on incoming messages, chats or contacts.
+READ_INCOMING=false
+# Tier 5 keeps the 1s gap between messages; lower tiers block task links and new chats.
+SAFE_MODE_DEFAULT_TIER=5
+# 00:00-19:00 UTC = 05:30-00:30 IST. Sends outside it are rejected (TaskManager retries later).
+SENDING_WINDOW_START_UTC=0
+SENDING_WINDOW_END_UTC=19
 EOF
-    chmod 600 "$PREFIX/server/.env"
-    echo "NEXT_PUBLIC_API_URL=http://127.0.0.1:3001" > "$PREFIX/client/.env"
-    echo "    dashboard login: admin / $ADMIN_PW"
-    echo "    (also saved in $PREFIX/server/.env - it is not shown again)"
-else
-    echo "==> server/.env exists, leaving it alone"
 fi
+chmod 600 "$PREFIX/server/.env"
 
-echo "==> Installing dependencies and building (a few minutes)"
-cd "$PREFIX"
-npm run install:all
-npm run build
+echo "== build (a few minutes)"
+cd "$PREFIX/server"
+chown -R blastup:blastup "$PREFIX"
+sudo -u blastup -H npm ci --no-audit --no-fund
+sudo -u blastup -H npm run build
 
-# Next.js excludes these from the standalone bundle on purpose; without the copy
-# the dashboard loads with no CSS or client JS.
-echo "==> Copying standalone assets"
-cp -r client/.next/static client/.next/standalone/.next/static
-[ -d client/public ] && cp -r client/public client/.next/standalone/public
-
-echo "==> Seeding the admin account"
-npm run seed || echo "    (already seeded)"
-
-chown -R "$SERVICE_USER:$SERVICE_USER" "$PREFIX"
-
-echo "==> Installing systemd units"
 cat > /etc/systemd/system/blastup-api.service <<EOF
 [Unit]
-Description=Blastup WhatsApp API
+Description=Blastup WhatsApp gateway (TaskManager)
 After=network.target mongod.service redis-server.service
-Requires=mongod.service
+Requires=mongod.service redis-server.service
 
 [Service]
-Type=simple
-User=$SERVICE_USER
+User=blastup
 WorkingDirectory=$PREFIX/server
 EnvironmentFile=$PREFIX/server/.env
-# The Baileys socket is a singleton - never run more than one of these.
+# One process only: it owns every employee's WhatsApp socket.
 ExecStart=/usr/bin/node dist/index.js
 Restart=always
 RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target
 EOF
-
-cat > /etc/systemd/system/blastup-ui.service <<EOF
-[Unit]
-Description=Blastup dashboard
-After=network.target blastup-api.service
-
-[Service]
-Type=simple
-User=$SERVICE_USER
-WorkingDirectory=$PREFIX/client/.next/standalone
-Environment=NODE_ENV=production
-Environment=PORT=3000
-# Loopback only: the dashboard is reached over an SSH tunnel, never published.
-Environment=HOSTNAME=127.0.0.1
-ExecStart=/usr/bin/node server.js
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
 systemctl daemon-reload
-systemctl enable --now blastup-api blastup-ui
-sleep 4
-systemctl --no-pager --lines=5 status blastup-api || true
+systemctl enable blastup-api
+systemctl restart blastup-api
 
-cat <<EOF
+echo "== wiring TaskManager"
+grep -q '^BLASTUP_URL=' "$TM_ENV" || echo 'BLASTUP_URL=http://127.0.0.1:3001' >> "$TM_ENV"
+# Encrypts the per-employee gateway keys TaskManager stores. Changing it means everyone links again.
+grep -q '^WHATSAPP_SECRET=' "$TM_ENV" || echo "WHATSAPP_SECRET=$(openssl rand -hex 32)" >> "$TM_ENV"
+systemctl restart taskmanager
 
-================================================================================
-Blastup is up on 127.0.0.1:3001 (API) and 127.0.0.1:3000 (dashboard).
-
-Neither is reachable from outside this box. To finish setup, tunnel in:
-
-    ssh -L 3000:127.0.0.1:3000 taskmanager-prod
-    # then open http://127.0.0.1:3000
-
-There you must:
-  1. Log in and scan the QR code with the WhatsApp account that will send.
-  2. Create an API key and put it in /opt/taskmanager/.env as BLASTUP_API_KEY.
-
-Full steps in deploy/whatsapp/README.md.
-================================================================================
-EOF
+for i in $(seq 1 30); do
+    curl -fs -o /dev/null http://127.0.0.1:3001/api/health && break
+    sleep 2
+done
+curl -fs -o /dev/null -w "gateway health: %{http_code}\n" http://127.0.0.1:3001/api/health
+ss -lnt | grep ':3001' | awk '{print "gateway listening on: " $4}'
+echo "Done. Each employee links their phone from My Profile -> WhatsApp in TaskManager."

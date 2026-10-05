@@ -7,6 +7,7 @@ import axiosInstance from '../utils/axiosInstance';
 import { API_PATHS } from '../utils/apiPaths';
 import Input from '../customcomponent/Input';
 import NotificationSettings from '../components/NotificationSettings';
+import WhatsAppLink from '../components/WhatsAppLink';
 
 /**
  * Where a member puts the number their task alerts go to. Deliberately the only
@@ -110,6 +111,8 @@ const Profile = () => {
             </button>
           </div>
         </form>
+
+        <WhatsAppLink defaultPhone={user?.phone} />
 
         <NotificationSettings />
 

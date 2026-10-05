@@ -65,6 +65,9 @@ export const API_PATHS = {
     MARK_ALL_READ: '/api/notifications/read-all',
     PREFERENCES: '/api/notifications/preferences',
     PUSH_TOKEN: '/api/notifications/push-token',
+    WHATSAPP: '/api/whatsapp/me',
+    WHATSAPP_PAIR: '/api/whatsapp/me/pair',
+    WHATSAPP_UNLINK: '/api/whatsapp/me/unlink',
 };
 
 /**

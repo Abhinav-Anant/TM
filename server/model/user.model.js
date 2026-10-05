@@ -23,6 +23,10 @@ const userSchema = new mongoose.Schema({
     notificationPrefs: { type: mongoose.Schema.Types.Mixed, default: {} },
     // Expo push tokens, one per signed-in device.
     pushTokens: { type: [String], default: [] },
+    // Their own WhatsApp linked through the gateway (utils/whatsapp.js): the gateway API key, encrypted,
+    // and the number it is connected as. waPhone null = not linked, alerts fall back to the company number.
+    waKey: { type: String, default: null, select: false },
+    waPhone: { type: String, default: null },
 },
 {
     timestamps: true 

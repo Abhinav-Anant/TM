@@ -28,6 +28,9 @@
 - [ ] Reports: department report reads tasks into memory (fine for thousands); switch to an aggregation if volumes grow
 - [ ] Mobile: offline mode (explicitly later in the spec)
 - [ ] Mobile: create projects, edit blocked-by, Kanban (web only for now)
+- [x] WhatsApp from each employee's own phone (QR / pairing code on Profile), member->head / head->admin / admin->anyone, admin broadcast
+- [ ] WhatsApp: live-test linking and sending against the real gateway with real phones (only the fake gateway is tested)
+- [ ] WhatsApp: each linked phone costs ~50-100 MB on the server; resize before linking more than ~10 people on 2 GB
 - [ ] Mobile: camera / photo / file pickers are written but were only tested in the browser build; try them on a phone
 - [ ] Attaching: PUT /api/tasks/:id (admin/head) still accepts any file URL; the new member endpoint checks ownership, the old path does not
 - [ ] Comment attachments (spec item 9), custom recurrence (spec item 21), admin Settings area (spec item 31)

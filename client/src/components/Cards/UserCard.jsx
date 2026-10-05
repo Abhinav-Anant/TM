@@ -12,7 +12,8 @@ const StatCell = ({ label, count, status }) => (
     </div>
 );
 
-const UserCard = ({ userInfo }) => {
+// `whatsapp`: the number they linked, null if not linked, undefined to show nothing (non-admins).
+const UserCard = ({ userInfo, whatsapp }) => {
     const initial = (userInfo?.name || '?').trim().charAt(0).toUpperCase();
 
     return (
@@ -33,10 +34,15 @@ const UserCard = ({ userInfo }) => {
                         </div>
                     )}
 
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-beam truncate">{userInfo?.name}</p>
                         <p className="text-xs text-dusk truncate">{userInfo?.email}</p>
                     </div>
+                    {whatsapp !== undefined && (
+                        <span className={`chip shrink-0 ${whatsapp ? 'chip-done' : ''}`} title={whatsapp ? `WhatsApp linked as +${whatsapp}` : 'WhatsApp not linked'}>
+                            {whatsapp ? 'WhatsApp' : 'No WhatsApp'}
+                        </span>
+                    )}
                 </div>
 
                 <div className="flex items-stretch gap-2 mt-4">

@@ -1,164 +1,107 @@
 # WhatsApp notifications (Blastup gateway)
 
-TaskManager sends an alert on every assignment, start and completion. This is the
-gateway that delivers them.
+Every employee links their **own** WhatsApp. When someone acts on a task, the alert goes out from their
+phone:
+
+| Who acts | Their own phone messages | Everyone else on the alert |
+|---|---|---|
+| Employee | the heads of their department | company number, if one is set |
+| Head | the admins, and the people in the departments they lead | company number, if one is set |
+| Admin | anyone | - |
+
+Admins can also message everyone, one department or chosen people from the **Team** page (Send WhatsApp).
+That goes from the admin's own phone, or from the company number with their name on it if they have not
+linked. Alerts with no person behind them (due-date reminders, overdue escalations) use the company number.
+If there's no company number, those alerts stay in-app. Someone who has not linked yet is treated the same way.
 
 ## How it fits together
 
 ```
-TaskManager (:8000) ──POST /api/send/text──> Blastup API (127.0.0.1:3001) ──> WhatsApp
-                          x-api-key                     │
-                                                  Blastup dashboard (127.0.0.1:3000)
-                                                  reached over an SSH tunnel only
+TaskManager (:8000) ──x-api-key per employee──> Blastup API (127.0.0.1:3001) ──> each person's WhatsApp
+       │                                                  │
+  My Profile: QR code or pairing code              one gateway account + session per employee
 ```
 
-Nothing new is exposed. Both Blastup processes bind to loopback, so ufw stays at
-22/80/443 and the dashboard is unreachable except through `ssh -L`.
+TaskManager creates a gateway account for each person the first time they link (they never see it), keeps
+its API key encrypted with `WHATSAPP_SECRET`, and shows the QR / pairing code on their Profile page.
+Blastup's own dashboard is not built or run. The API listens on 127.0.0.1 only; ufw stays at 22/80/443.
 
 ## Read this before you start
 
-Blastup drives WhatsApp through **Baileys**, which speaks WhatsApp Web's protocol
-as if it were a linked device. It is not the official Business API, and WhatsApp
-does not sanction it. Two practical consequences:
+Blastup drives WhatsApp through **Baileys**, which acts as a WhatsApp Web "linked device". It is not the
+official Business API and WhatsApp does not sanction it.
 
-- **The sending account can be banned.** Automated sending is what bans look for.
-  Use a dedicated number you are willing to lose, not anyone's personal WhatsApp
-  and not the company's main line.
-- **The session is a linked device.** Logging the account out of linked devices,
-  or letting it idle for long enough, drops the session and needs a fresh QR scan.
-  Alerts silently stop until someone re-links it, so watch for that.
-
-Blastup's own SafeMode (humanised delays, message variation) exists to reduce ban
-risk on bulk campaigns. Task alerts are low volume and spread out, which is the
-benign end of this — but the risk is not zero and it is not something the app can
-control.
+- **People are linking personal accounts.** Get each employee's agreement first. A linked device receives
+  their messages. `patch-blastup.py` makes the gateway drop them: no history sync, nothing stored, no
+  auto-replies (`READ_INCOMING=false`). Even so, the server holds a login to each account.
+- **An account can be banned** for automated sending. Task alerts are low volume and paced (1 message
+  per second per number), which is the benign end. The risk is still not zero.
+- **Unlinking on the phone stops that person's alerts** silently going out from their number. They fall
+  back to the company number (or in-app) until the person links again; the admin's Team page shows who is linked.
+- **Memory:** each linked phone costs roughly 50-100 MB on the server. 2 GB is fine for about 10 people.
+  Plan 4 GB for 30, 8 GB for 50.
 
 ## 1. Install
 
-From the **Proxmox console** as root (`ssh host "sudo ..."` does not work on this
-box — only the taskmanager restart is passwordless):
+On the server, after `deploy/server/install.sh`:
 
 ```bash
 bash /opt/taskmanager/deploy/whatsapp/install-blastup.sh
 ```
 
-It installs Redis, clones to `/opt/blastup`, generates secrets, builds both
-halves, seeds the admin account and installs two systemd units — `blastup-api`
-and `blastup-ui`. The generated dashboard password lives in
-`/opt/blastup/server/.env`.
+The script:
+- installs Redis (required, it is Safe Mode's store) and clones Blastup to `/opt/blastup`
+- applies `patch-blastup.py` and builds the API
+- runs it as the `blastup-api` service (user `blastup`)
+- adds `BLASTUP_URL` and `WHATSAPP_SECRET` to `/opt/taskmanager/.env` and restarts TaskManager
 
-**Redis is required, not optional.** Blastup wraps the Baileys socket in SafeMode
-and SafeMode's store is Redis, so *every* send goes through it — without Redis
-sends fail rather than merely degrade. Its own fallback to an in-memory store
-never fires, because that `catch` only wraps client construction, which succeeds
-even when nothing is listening on 6379. The symptom is a loop of
-`Redis connection error` in the journal.
+Re-running it updates and re-patches. Linked sessions are kept.
 
-systemd, not pm2, deliberately: pm2 was already tried on this host and failed
-because systemd's `CHASE_SAFE` refuses to read a PID file under an unprivileged
-user's home.
+What `patch-blastup.py` changes (each edit asserts its anchor, so an upstream change fails loudly):
 
-## 2. Link the WhatsApp account
+| Change | Why |
+|---|---|
+| No history sync; history, contacts and incoming handlers return early | personal chats never reach the database, no chatbot replies |
+| `markOnlineOnConnect: false` | otherwise the phone stops showing its own notifications |
+| `POST /api/whatsapp/pair` | a phone cannot scan a QR on its own screen |
+| `SAFE_MODE_DEFAULT_TIER` (set to 5) | tiers 1-2 block links and new chats, so no alert would get through |
+| `SENDING_WINDOW_*_UTC` (set to 0-19 = 05:30-00:30 IST) | stock 09-21 UTC drops every alert before 14:30 IST |
+| listen on `BIND_HOST` (127.0.0.1) | stock code binds every interface |
 
-```bash
-ssh -L 3000:127.0.0.1:3000 taskmanager-prod
-```
+## 2. Everyone links their phone
 
-Open `http://127.0.0.1:3000`, log in as `admin`, and scan the QR code with the
-phone whose number will send the alerts. The session is written to
-`/opt/blastup/server/sessions` and survives restarts, so this is a one-time step
-unless the device is unlinked.
+**My Profile → Your WhatsApp**:
+- **On a computer:** Show QR code, then in WhatsApp on the phone go to **Linked devices → Link a device** and scan it.
+- **On the phone:** enter the number and tap Get code. Then in WhatsApp go to **Linked devices → Link a device → Link with phone number instead** and type the code.
+  The same option is on the mobile app's Profile tab.
 
-## 3. Create the API key
+The card turns green when the link is live. **Unlink** logs the gateway out of that phone.
 
-Still in the dashboard, create an API key and copy it — **it is shown once**.
-Then in `/opt/taskmanager/.env`:
+Each person also needs their **WhatsApp number** saved on My Profile. That is where alerts to them are delivered.
 
-```
-BLASTUP_URL=http://127.0.0.1:3001
-BLASTUP_API_KEY=<the key>
-DEFAULT_COUNTRY_CODE=91
-CLIENT_URL=https://tm.leoprime.in
-```
+## 3. Optional: a company number
 
-```bash
-ssh taskmanager-prod "sudo systemctl restart taskmanager"
-```
+For reminders and people who have not linked:
+1. Create a TaskManager user for it, for example `whatsapp@yourcompany.com`.
+2. Sign in as that user and link a dedicated phone.
+3. Set `WHATSAPP_COMPANY_EMAIL=whatsapp@yourcompany.com` in `/opt/taskmanager/.env`.
+4. Run `systemctl restart taskmanager`.
 
-The boot log flips from `WhatsApp notifications: disabled` to `enabled`. Until
-both `BLASTUP_URL` and `BLASTUP_API_KEY` are set, every send is a deliberate
-no-op and the app runs normally — a half-finished gateway cannot take it down.
+Without a company number those alerts are in-app only.
 
-## 3a. Two hardening steps (both need root)
+## 4. Verify
 
-Run these once, from the Proxmox console or an interactive SSH session:
+Assign a task to someone in your department, then:
 
 ```bash
-sudo bash /opt/taskmanager/deploy/whatsapp/safemode-ist.sh
-sudo bash /opt/taskmanager/deploy/whatsapp/bind-loopback.sh
+journalctl -u taskmanager -u blastup-api -f
 ```
-
-**`safemode-ist.sh`** — Safe Mode ships tuned for bulk marketing from a cold number,
-not transactional alerts, and two of its rules break this use case:
-
-- Its sending window is checked *before* the tier config, so even Tier 5 enforces
-  it, and it **throws rather than queues** — a blocked alert is lost, not delayed.
-  The default 09:00–21:00 UTC is 14:30–02:30 IST, which kills every alert sent
-  before 14:30 IST. The script widens it to 07:30–22:30 IST and enables Tier 5.
-- Tiers 1–2 block links in a first message and every alert carries a task deep
-  link; Tier 1 also allows zero new chats per day, so no new colleague could ever
-  be messaged. Use Tier 5 — the warm-up tiers are for a different job.
-
-Every tier keeps a `minGapMs` (1s at Tier 5) and rejects anything faster, which is
-why `notify()` paces its sends (`WHATSAPP_SEND_GAP_MS`, default 1200ms) instead of
-firing them concurrently — a completion notifies assignees, their head and every
-admin at once.
-
-**`bind-loopback.sh`** — the API's `server.listen(env.PORT)` takes no host, so Node
-binds every interface and the app exposes no setting to change it. ufw is otherwise
-the only thing keeping an API that controls a linked WhatsApp account off the
-internet. The script binds it to 127.0.0.1.
-
-Both edit vendored files, so a `git pull` in `/opt/blastup` clobbers them. Both are
-idempotent and keep a `.orig`, so just re-run them.
-
-## 4. Members add their numbers
-
-Every signed-in user has **My Profile** in the sidebar. Anyone without a number
-saved also gets a banner on every page until they add one; it can be dismissed
-for the session but returns at the next sign-in.
-
-Numbers are normalised on save: a bare 10-digit number is treated as Indian and
-stored as `919876543210`; anything else needs an explicit `+<country code>`.
-A number that cannot be normalised is rejected with a 400 rather than stored, so
-nobody is left believing they are reachable when they are not.
-
-**A member with no number still gets in-app and real-time alerts.** The WhatsApp
-message is extra reach, never the only path — which is why the prompt nags rather
-than blocks.
-
-## 5. Verify
-
-Assign yourself a task, then:
-
-```bash
-journalctl -u blastup-api -f
-```
-
-You should see the send and WhatsApp's acknowledgement. If nothing arrives:
 
 | Symptom | Cause |
 |---|---|
-| App log: `WhatsApp notifications: disabled` | `BLASTUP_URL` or `BLASTUP_API_KEY` missing from `/opt/taskmanager/.env` |
-| App log: `WhatsApp send failed (401)` | API key wrong or deleted in the dashboard |
-| App log: `WhatsApp send failed (4xx)` about connection | Session dropped — re-scan the QR |
-| Nothing logged at all for one person | That member has no number saved |
-| `blastup-api` journal loops on `Redis connection error` | `redis-server` not installed or not running — sends will fail |
-| Dashboard loads but is unstyled | `.next/static` was not copied into `.next/standalone` after the build |
-
-## What this does not do
-
-Inbound messages, the chatbot, broadcast campaigns, contact sync. Blastup ships
-all of it and none of it is wired up — TaskManager only ever sends a
-notification. Leave it that way unless you actually want a bot answering replies,
-which is a different project with different risk.
+| Profile has no WhatsApp card | `BLASTUP_URL` missing from `/opt/taskmanager/.env` |
+| "The WhatsApp gateway did not answer" | `systemctl status blastup-api`; Redis or MongoDB down |
+| Pairing code never connects | the code expires in about a minute; get a new one |
+| `WhatsApp send failed (4xx) ... window` | outside `SENDING_WINDOW_*_UTC`; the queue retries for a few hours |
+| Alert came from the company number | that person's phone is not linked (or dropped); check the Team page |
+| `blastup-api` journal loops on `Redis connection error` | `redis-server` not running; sends fail |

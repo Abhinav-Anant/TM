@@ -4,16 +4,20 @@ import axiosInstance from '../../utils/axiosInstance';
 import { API_PATHS } from '../../utils/apiPaths';
 import { useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { LuFileSpreadsheet, LuUpload, LuDownload, LuUserPlus } from 'react-icons/lu';
+import { LuFileSpreadsheet, LuUpload, LuDownload, LuUserPlus, LuMessageCircle } from 'react-icons/lu';
 import UserCard from '../../components/Cards/UserCard';
 import { useContext } from 'react';
 import { UserContext } from '../../context/userContext';
 import Modal from '../../components/layouts/Modal';
 import AddUserModal from '../../components/AddUserModal';
+import SendWhatsAppModal from '../../components/SendWhatsAppModal';
 
 const ManageUsers = () => {
   const { user } = useContext(UserContext);
   const [allUsers, setAllUsers] = useState([]);
+  // Admin only: who has linked their own WhatsApp (null while unknown or when the server has no gateway).
+  const [wa, setWa] = useState(null);
+  const [openSend, setOpenSend] = useState(false);
   const [openAdd, setOpenAdd] = useState(false);
   const [openImport, setOpenImport] = useState(false);
   const [csvFile, setCsvFile] = useState(null);
@@ -98,6 +102,17 @@ const ManageUsers = () => {
     return () => { }
   }, [])
 
+  useEffect(() => {
+    if (user?.role !== 'admin') return;
+    axiosInstance.get(API_PATHS.WHATSAPP.ACCOUNTS)
+      .then(({ data }) => setWa({
+        enabled: data.enabled,
+        users: data.users,
+        linked: Object.fromEntries(data.users.filter((u) => u.linkedAs).map((u) => [u._id, u.linkedAs])),
+      }))
+      .catch(() => setWa(null));
+  }, [user?.role])
+
 
 
 
@@ -123,6 +138,12 @@ const ManageUsers = () => {
               <button className='btn btn-sm' onClick={handleDownloadReport}>
                 <LuFileSpreadsheet /> Download report
               </button>
+
+              {wa?.enabled && (
+                <button className='btn btn-sm' onClick={() => setOpenSend(true)}>
+                  <LuMessageCircle /> Send WhatsApp
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -130,7 +151,7 @@ const ManageUsers = () => {
         {allUsers.length > 0 ? (
           <div className='grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mt-5'>
             {allUsers.map((member) => (
-              <UserCard key={member._id} userInfo={member} />
+              <UserCard key={member._id} userInfo={member} whatsapp={wa?.enabled ? wa.linked[member._id] || null : undefined} />
             ))}
           </div>
         ) : (
@@ -146,6 +167,7 @@ const ManageUsers = () => {
       </div>
 
       <AddUserModal isOpen={openAdd} onClose={() => setOpenAdd(false)} onCreated={getAllUsers} />
+      {wa?.enabled && <SendWhatsAppModal isOpen={openSend} onClose={() => setOpenSend(false)} people={wa.users} />}
 
       <Modal isOpen={openImport} onClose={closeImport} title="Import members from a CSV">
         <div className='space-y-5'>

@@ -92,35 +92,79 @@ const hours = (offset) => new Date(Date.now() + offset * 60 * 60 * 1000).toISOSt
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // --- fake Blastup gateway, so we can prove a WhatsApp message actually leaves ---
-// Speaks just enough of the real contract: POST /api/send/text, x-api-key header,
-// {to, text} body. Rejecting a wrong key here is what proves the app sends one.
+// Speaks just enough of the real contract: one account per employee (register / login / API key),
+// link by QR or pairing code, and POST /api/send/text with an x-api-key header. BLASTUP_KEY is the
+// company number. `scan(email, phone)` stands in for someone scanning the QR with their phone, and
+// every delivered message records which number it went out from.
 const startWhatsAppGateway = () => {
     const received = [];
+    const accounts = new Map();
+    const keys = new Map([[BLASTUP_KEY, null]]);
+    let keySeq = 0;
+    const reply = (res, status, data, headers = {}) => {
+        res.writeHead(status, { "Content-Type": "application/json", ...headers });
+        res.end(JSON.stringify(status < 400 ? { success: true, data } : { success: false, error: data }));
+    };
     const server = http.createServer((req, res) => {
         let body = "";
         req.on("data", (chunk) => { body += chunk; });
         req.on("end", () => {
-            if (req.method !== "POST" || req.url !== "/api/send/text") {
-                res.writeHead(404).end('{"error":"not found"}');
-                return;
+            let json = {};
+            try { json = body ? JSON.parse(body) : {}; } catch { return reply(res, 400, "bad json"); }
+            const route = `${req.method} ${req.url}`;
+            const cookie = (account) => ({ "Set-Cookie": `wa_token=${encodeURIComponent(account.email)}; Path=/; HttpOnly` });
+
+            if (route === "POST /api/auth/register") {
+                if (accounts.has(json.email)) return reply(res, 409, "An account already exists");
+                const account = { email: json.email, password: json.password, status: "disconnected", phone: null };
+                accounts.set(account.email, account);
+                return reply(res, 201, { user: { id: account.email } }, cookie(account));
             }
-            if (req.headers["x-api-key"] !== BLASTUP_KEY) {
-                res.writeHead(401).end('{"error":"bad api key"}');
-                return;
+            if (route === "POST /api/auth/login") {
+                const account = accounts.get(json.username);
+                if (!account || account.password !== json.password) return reply(res, 401, "Invalid credentials");
+                return reply(res, 200, { user: { id: account.email } }, cookie(account));
             }
-            try {
-                received.push(JSON.parse(body));
-            } catch {
-                res.writeHead(400).end('{"error":"bad json"}');
-                return;
+            if (route === "POST /api/keys") {
+                const token = /wa_token=([^;]+)/.exec(req.headers.cookie || "");
+                const account = token && accounts.get(decodeURIComponent(token[1]));
+                if (!account) return reply(res, 401, "Authentication required");
+                const key = `wa_key_${++keySeq}`;
+                keys.set(key, account);
+                return reply(res, 201, { key });
             }
-            res.writeHead(200, { "Content-Type": "application/json" });
-            res.end('{"success":true}');
+
+            if (!keys.has(req.headers["x-api-key"])) return reply(res, 401, "bad api key");
+            const account = keys.get(req.headers["x-api-key"]);
+            if (route === "POST /api/send/text") {
+                if (account && account.status !== "connected") return reply(res, 503, "WhatsApp is not connected for this account");
+                received.push({ ...json, from: account ? account.phone : "company" });
+                return reply(res, 200, {});
+            }
+            if (!account) return reply(res, 404, "not found");
+            if (route === "GET /api/whatsapp/status") return reply(res, 200, { status: account.status, phone: account.phone });
+            if (route === "POST /api/whatsapp/reconnect") { account.status = "qr_ready"; return reply(res, 200, {}); }
+            if (route === "GET /api/whatsapp/qr") {
+                return account.status === "qr_ready" ? reply(res, 200, { qr: "data:image/png;base64,RkFLRVFS" }) : reply(res, 404, "QR not available");
+            }
+            if (route === "POST /api/whatsapp/pair") {
+                if (account.status === "connected") return reply(res, 409, "Already linked");
+                account.status = "qr_ready";
+                account.pairedWith = json.phone;
+                return reply(res, 200, { code: "ABCD1234" });
+            }
+            if (route === "POST /api/whatsapp/logout") {
+                account.status = "disconnected";
+                account.phone = null;
+                return reply(res, 200, {});
+            }
+            return reply(res, 404, "not found");
         });
     });
+    const scan = (email, phone) => Object.assign(accounts.get(email), { status: "connected", phone });
 
     return new Promise((resolve) => {
-        server.listen(BLASTUP_PORT, "127.0.0.1", () => resolve({ server, received }));
+        server.listen(BLASTUP_PORT, "127.0.0.1", () => resolve({ server, received, accounts, scan }));
     });
 };
 
@@ -2105,6 +2149,96 @@ const waitForServer = async () => {
         assert.strictEqual((await call("GET", `/api/files/${p8_id}/link`, { token: O })).status, 404, "you cannot mint a link to a file you cannot read");
         assert.strictEqual((await call("GET", `/api/files/${p8_id}/link`)).status, 401);
         pass("Mobile support", "company dashboard (admin only), members attach their own uploads, 5-minute single-file links");
+
+        // ---------- 9. WHATSAPP FROM EVERYONE'S OWN PHONE ----------
+        const p9_field = (await call("POST", "/api/departments", { token: A, body: { name: "Field" } })).body.department;
+        const p9_make = async (name, email, role, phone, head = false) => {
+            const made = await newUser({ name, email, role, phone, head, ...(role === "admin" ? {} : { department: p9_field._id }) });
+            assert.strictEqual(made.status, 201, `create ${email}: ${made.status}`);
+            const session = await call("POST", "/api/auth/login", { body: { email, password: "secret123" } });
+            return { id: made.body.user._id, token: session.body.token, gw: `tm-${made.body.user._id}@taskmanager.local` };
+        };
+        const p9_hank = await p9_make("Hank Head", "hank@e2e.test", "head", "98000 00001", true);
+        const p9_meg = await p9_make("Meg Member", "meg@e2e.test", "member", "98000 00002");
+        const p9_ari = await p9_make("Ari Admin", "ari@e2e.test", "admin", "98000 00003");
+        const p9_me = async (u) => (await call("GET", "/api/whatsapp/me", { token: u.token })).body;
+        const p9_got = (to, title) => waitFor(() => wa.received.find((m) => m.to === to && m.text.includes(title)));
+
+        // linking: QR on a computer...
+        assert.strictEqual((await p9_me(p9_meg)).enabled, true);
+        assert.strictEqual((await p9_me(p9_meg)).status, "disconnected");
+        assert.strictEqual((await call("POST", "/api/whatsapp/me/link", { token: p9_meg.token })).status, 200);
+        const p9_qr = await p9_me(p9_meg);
+        assert.strictEqual(p9_qr.status, "qr_ready");
+        assert.ok(p9_qr.qr.startsWith("data:image/png"), "the QR comes back for the profile page to show");
+        assert.ok(wa.accounts.has(p9_meg.gw), "one gateway account per employee, created on first link");
+        wa.scan(p9_meg.gw, "919800000002");
+        const p9_linked = await p9_me(p9_meg);
+        assert.deepStrictEqual([p9_linked.status, p9_linked.phone, p9_linked.qr], ["connected", "919800000002", null]);
+
+        // ...or a pairing code when the phone is the only screen
+        const p9_pair = await call("POST", "/api/whatsapp/me/pair", { token: p9_hank.token, body: { phone: "98000 00001" } });
+        assert.strictEqual(p9_pair.status, 200);
+        assert.strictEqual(p9_pair.body.code, "ABCD1234");
+        assert.strictEqual(wa.accounts.get(p9_hank.gw).pairedWith, "919800000001", "the number is normalised before it reaches WhatsApp");
+        assert.strictEqual((await call("POST", "/api/whatsapp/me/pair", { token: p9_hank.token, body: { phone: "123" } })).status, 400, "junk number");
+        wa.scan(p9_hank.gw, "919800000001");
+        assert.strictEqual((await call("POST", "/api/whatsapp/me/pair", { token: p9_hank.token, body: { phone: "98000 00001" } })).status, 409, "already linked");
+        assert.strictEqual((await p9_me(p9_hank)).status, "connected");
+        await call("POST", "/api/whatsapp/me/link", { token: p9_ari.token });
+        wa.scan(p9_ari.gw, "919800000003");
+        assert.strictEqual((await p9_me(p9_ari)).status, "connected");
+        assert.strictEqual((await call("GET", "/api/whatsapp/me")).status, 401);
+
+        // head -> their own member: from the head's phone
+        const p9_t1 = (await call("POST", "/api/tasks", { token: p9_hank.token, body: { title: "Survey plot 9", assignedTo: [p9_meg.id], dueDate: day(3) } })).body.task;
+        assert.ok(p9_t1 && p9_t1._id, "head created the task");
+        assert.strictEqual((await p9_got("919800000002", "Survey plot 9")).from, "919800000001", "assignment goes out from the head's own WhatsApp");
+
+        // member finishes -> their head hears from the member's phone; admins hear from the company number
+        await call("PUT", `/api/tasks/${p9_t1._id}/status`, { token: p9_meg.token, body: { status: "Completed" } });
+        assert.strictEqual((await p9_got("919800000001", "Survey plot 9 is now Completed")).from, "919800000002", "member -> head, from the member's phone");
+        assert.strictEqual((await p9_got("919800000003", "Survey plot 9 is now Completed")).from, "company", "a member's phone never messages the admins; the company number does");
+
+        // admin -> head, then head finishes -> admin hears from the head's phone
+        const p9_t2 = (await call("POST", "/api/tasks", { token: p9_ari.token, body: { title: "Quarterly field report", assignedTo: [p9_hank.id], dueDate: day(5) } })).body.task;
+        assert.strictEqual((await p9_got("919800000001", "Quarterly field report")).from, "919800000003", "admin -> anyone, from the admin's phone");
+        await call("PUT", `/api/tasks/${p9_t2._id}/status`, { token: p9_hank.token, body: { status: "Completed" } });
+        assert.strictEqual((await p9_got("919800000003", "Quarterly field report is now Completed")).from, "919800000001", "head -> admin, from the head's phone");
+
+        // admin messages anyone: a department, from the admin's phone
+        const p9_sent = await call("POST", "/api/whatsapp/send", { token: p9_ari.token, body: { departmentId: p9_field._id, text: "Team meeting at 5" } });
+        assert.strictEqual(p9_sent.status, 200);
+        assert.strictEqual(p9_sent.body.queued, 2, "the department minus the sender");
+        assert.strictEqual(p9_sent.body.from, "your WhatsApp");
+        assert.strictEqual((await p9_got("919800000002", "Team meeting at 5")).from, "919800000003");
+        assert.strictEqual((await p9_got("919800000001", "Team meeting at 5")).text, "Team meeting at 5", "from their own phone it needs no name tag");
+        const p9_one = await call("POST", "/api/whatsapp/send", { token: A, body: { userIds: [p9_meg.id, "bogus"], text: "Call me" } });
+        assert.strictEqual(p9_one.body.from, "the company number", "an admin who has not linked sends from the company number");
+        assert.ok(/^\*.+:\*\nCall me$/.test((await p9_got("919800000002", "Call me")).text), "...with their name on it");
+        assert.strictEqual((await call("POST", "/api/whatsapp/send", { token: p9_meg.token, body: { everyone: true, text: "hi" } })).status, 403, "only admins broadcast");
+        assert.strictEqual((await call("POST", "/api/whatsapp/send", { token: p9_ari.token, body: { text: "nobody" } })).status, 400, "pick recipients");
+        assert.strictEqual((await call("POST", "/api/whatsapp/send", { token: p9_ari.token, body: { everyone: true, text: " " } })).status, 400, "empty message");
+
+        // who has linked, for the admin
+        const p9_accounts = await call("GET", "/api/whatsapp/accounts", { token: p9_ari.token });
+        assert.strictEqual(p9_accounts.body.users.find((u) => u._id === p9_meg.id).linkedAs, "919800000002");
+        assert.strictEqual(p9_accounts.body.users.find((u) => u.email === "member@example.test").linkedAs, null);
+        assert.ok(p9_accounts.body.users.every((u) => u.waKey === undefined), "gateway keys never leave the server");
+        assert.strictEqual((await call("GET", "/api/whatsapp/accounts", { token: p9_hank.token })).status, 403);
+
+        // a phone that drops off: the queued alert falls back to the company number
+        wa.accounts.get(p9_hank.gw).status = "disconnected";
+        const p9_t3 = (await call("POST", "/api/tasks", { token: p9_hank.token, body: { title: "Fence repair", assignedTo: [p9_meg.id], dueDate: day(2) } })).body.task;
+        assert.strictEqual((await p9_got("919800000002", "Fence repair")).from, "company", "head's phone is offline: company number carries it");
+        assert.strictEqual((await p9_me(p9_hank)).status, "disconnected");
+
+        // unlinking: back to the company number
+        assert.strictEqual((await call("POST", "/api/whatsapp/me/unlink", { token: p9_meg.token })).status, 200);
+        assert.strictEqual((await p9_me(p9_meg)).status, "disconnected");
+        await call("PUT", `/api/tasks/${p9_t3._id}/status`, { token: p9_meg.token, body: { status: "In Progress" } });
+        assert.strictEqual((await p9_got("919800000001", "Fence repair is now In Progress")).from, "company");
+        pass("WhatsApp per person", "QR + pairing-code linking, member->head / head->admin / admin->anyone from own phones, company fallback, admin broadcast");
 
         console.log("\n  FEATURE VERIFICATION\n  " + "=".repeat(74));
         results.forEach((r) => console.log(`  [PASS] ${r.feature.padEnd(28)} ${r.detail}`));
