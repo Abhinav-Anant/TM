@@ -26,6 +26,9 @@ const calendarRoutes = require('./routes/calendar.route.js');
 const savedFilterRoutes = require('./routes/savedFilter.route.js');
 
 const app = express();
+// Behind a local reverse proxy (nginx), take the client IP from X-Forwarded-For so the
+// login throttle keys on the real address. Only a proxy on this machine is trusted.
+app.set('trust proxy', 'loopback');
 
 if (!process.env.JWT_SECRET) {
     console.error("JWT_SECRET is not set - refusing to start.");

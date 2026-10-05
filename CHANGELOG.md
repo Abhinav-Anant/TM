@@ -2,6 +2,11 @@
 
 ## Unreleased — SOHO redesign
 
+### Deployment
+- `deploy/server/`: one-command install for a single Ubuntu 24.04 box (firewall, swap, Node 22, local MongoDB 8,
+  nginx, Let's Encrypt, systemd service). See `deploy/server/README.md`.
+- The server trusts `X-Forwarded-For` from a proxy on the same machine only, so the login throttle sees real client IPs behind nginx.
+
 ### Phase 1 — Foundation (security)
 - Uploaded files are no longer public. `/uploads` static serving removed; files are stored through a
   storage driver (`local` or `s3`/MinIO/R2) and served by `GET /api/files/:id`, which requires a session

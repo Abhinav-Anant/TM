@@ -1,0 +1,19 @@
+[Unit]
+Description=Task Manager API and web app
+After=network-online.target mongod.service
+Wants=network-online.target mongod.service
+
+[Service]
+User=tm
+WorkingDirectory=/opt/taskmanager
+EnvironmentFile=/opt/taskmanager/.env
+ExecStart=/usr/bin/node server/index.js
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
