@@ -13,6 +13,8 @@ const SendWhatsAppModal = ({ isOpen, onClose, people }) => {
   const [picked, setPicked] = useState([]);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  // Shown inside the dialog: a toast would sit under the modal's backdrop.
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (!isOpen || departments.length) return;
@@ -29,14 +31,15 @@ const SendWhatsAppModal = ({ isOpen, onClose, people }) => {
       : to === 'department' ? { departmentId }
       : { userIds: picked };
     setSending(true);
+    setError('');
     try {
       const { data } = await axiosInstance.post(API_PATHS.WHATSAPP.SEND, { text, ...audience });
       toast.success(`Sending to ${data.queued} ${data.queued === 1 ? 'person' : 'people'} from ${data.from}`);
       if (data.noNumber?.length) toast(`No WhatsApp number on file: ${data.noNumber.join(', ')}`);
       setText('');
       onClose();
-    } catch (error) {
-      toast.error(error?.response?.data?.message || 'The message was not sent');
+    } catch (err) {
+      setError(err?.response?.data?.message || 'The message was not sent');
     } finally {
       setSending(false);
     }
@@ -85,6 +88,8 @@ const SendWhatsAppModal = ({ isOpen, onClose, people }) => {
             onChange={(e) => setText(e.target.value)} placeholder="Team meeting at 5 in the conference room"
           />
         </div>
+
+        {error && <p className="text-sm text-alert" role="alert">{error}</p>}
 
         <div className="flex justify-end">
           <button type="submit" className="btn btn-primary" disabled={!ready || sending}>
