@@ -3,6 +3,7 @@
 # Safe to re-run; a second run updates the code and keeps .env and the database.
 #   sudo DOMAIN=tm.example.com bash install.sh
 # Optional: REPO=<git url>  BRANCH=<branch>
+#           IP_ACCESS=true also serves the app on http://<server ip> (stays on until IP_ACCESS=false)
 set -euo pipefail
 
 DOMAIN=${DOMAIN:?set DOMAIN, e.g. DOMAIN=tm.example.com}
@@ -83,6 +84,12 @@ if [ ! -f /etc/nginx/sites-available/taskmanager ]; then
 fi
 ln -sf /etc/nginx/sites-available/taskmanager /etc/nginx/sites-enabled/taskmanager
 rm -f /etc/nginx/sites-enabled/default
+if [ "${IP_ACCESS:-}" = true ]; then
+    install -m 644 deploy/server/nginx-ip-access.conf /etc/nginx/sites-available/taskmanager-ip
+    ln -sf /etc/nginx/sites-available/taskmanager-ip /etc/nginx/sites-enabled/taskmanager-ip
+elif [ "${IP_ACCESS:-}" = false ]; then
+    rm -f /etc/nginx/sites-enabled/taskmanager-ip
+fi
 nginx -t && systemctl reload nginx
 certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email --redirect
 

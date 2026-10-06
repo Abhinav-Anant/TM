@@ -19,6 +19,7 @@ Open `https://<domain>` and create the first account: it becomes the admin.
 | Update to the latest code | re-run the same command (keeps `.env` and the database) |
 | Logs | `journalctl -u taskmanager -f` |
 | Restart after editing `.env` | `systemctl restart taskmanager` |
+| Also answer on `http://<server ip>` (DNS trouble) | re-run with `IP_ACCESS=true` (plain http; `IP_ACCESS=false` turns it off) |
 | Back up the database | `mongodump --db taskmanager --archive=/root/tm-$(date +%F).gz --gzip` |
 
 Uploaded files live in `/opt/taskmanager/server/uploads` (back these up too) unless `STORAGE_DRIVER=s3`.

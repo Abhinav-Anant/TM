@@ -8,14 +8,17 @@ const readCookie = (req, name) => {
 
 // Secure is opt-in (COOKIE_SECURE=true): a deployment still on plain http would
 // otherwise have the browser silently drop the cookie and nobody could log in.
-const cookieOptions = () => ({
+// Even then it applies only to requests that arrived over HTTPS, so the same server
+// can also answer on plain http (e.g. by IP address when DNS is broken) and still log in.
+// req.secure reads X-Forwarded-Proto from the local nginx (trust proxy: loopback).
+const cookieOptions = (req) => ({
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.COOKIE_SECURE === 'true',
+    secure: process.env.COOKIE_SECURE === 'true' && Boolean(req?.secure),
     path: '/',
 });
 
-const setAuthCookie = (res, token) => res.cookie(AUTH_COOKIE, token, { ...cookieOptions(), maxAge: MAX_AGE_MS });
-const clearAuthCookie = (res) => res.clearCookie(AUTH_COOKIE, cookieOptions());
+const setAuthCookie = (res, token) => res.cookie(AUTH_COOKIE, token, { ...cookieOptions(res.req), maxAge: MAX_AGE_MS });
+const clearAuthCookie = (res) => res.clearCookie(AUTH_COOKIE, cookieOptions(res.req));
 
 module.exports = { AUTH_COOKIE, readCookie, setAuthCookie, clearAuthCookie };

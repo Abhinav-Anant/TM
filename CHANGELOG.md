@@ -18,6 +18,8 @@
 - `BLASTUP_API_KEY` is no longer required; `BLASTUP_URL` alone turns WhatsApp on.
 
 ### Deployment
+- Optional plain-http access by server IP (`IP_ACCESS=true` in `deploy/server/install.sh`) for when DNS misbehaves. With
+  `COOKIE_SECURE=true` the session cookie is now Secure only on HTTPS requests, so logging in works on both.
 - `deploy/server/`: one-command install for a single Ubuntu 24.04 box (firewall, swap, Node 22, local MongoDB 8,
   nginx, Let's Encrypt, systemd service). See `deploy/server/README.md`.
 - The server trusts `X-Forwarded-For` from a proxy on the same machine only, so the login throttle sees real client IPs behind nginx.
