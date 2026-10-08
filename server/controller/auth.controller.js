@@ -33,6 +33,9 @@ const isThrottled = (key) => {
     return (failures.get(key)?.count || 0) >= MAX_FAILURES;
 };
 const recordFailure = (key) => {
+    // Bounded: a flood of made-up emails must not grow this map without limit.
+    if (failures.size > 10000) for (const [k, v] of failures) if (v.resetAt < Date.now()) failures.delete(k);
+    if (failures.size > 10000) failures.clear();
     const entry = failures.get(key);
     if (!entry || entry.resetAt < Date.now()) failures.set(key, { count: 1, resetAt: Date.now() + WINDOW_MS });
     else entry.count += 1;
@@ -41,12 +44,20 @@ const recordFailure = (key) => {
 // Register User
 const registerUser = async (req, res) => {
     try {
-        const { name, email, password, phone, adminInviteToken } = req.body;
+        const { name, password, phone, adminInviteToken } = req.body;
+        // Strings only: an object here ({"$ne": null}) would reach the query as an operator.
+        const email = req.body.email;
+        if (typeof email !== "string" || typeof name !== "string" || typeof password !== "string") {
+            return res.status(400).json({ message: "Name, email and password are required" });
+        }
+        if (password.length < MIN_PASSWORD_LENGTH) {
+            return res.status(400).json({ message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
+        }
 
         // Accounts are made by an admin (Team page). Open signup is opt-in; the
         // very first account bootstraps the deployment as its admin.
         const bootstrap = (await User.estimatedDocumentCount()) === 0;
-        const invited = Boolean(adminInviteToken) &&
+        const invited = typeof adminInviteToken === "string" && adminInviteToken !== "" &&
             [process.env.ADMIN_INVITE_TOKEN, process.env.HEAD_INVITE_TOKEN].includes(adminInviteToken);
         if (!bootstrap && !invited && process.env.ALLOW_SIGNUP !== "true") {
             return res.status(403).json({ message: "Sign-up is closed. Ask an admin to create your account." });
@@ -105,10 +116,13 @@ const registerUser = async (req, res) => {
 const loginUser = async (req, res) => {
     try {
         const { email, password } = req.body;
-
+        // Strings only: an object email would reach findOne as a query operator.
+        if (typeof email !== "string" || typeof password !== "string") {
+            return res.status(400).json({ message: "Email and password are required" });
+        }
 
         // Throttle guessing: 10 failures per IP+email per 15 minutes.
-        const throttleKey = `${req.ip}|${String(email).toLowerCase()}`;
+        const throttleKey = `${req.ip}|${email.toLowerCase()}`;
         if (isThrottled(throttleKey)) {
             return res.status(429).json({ message: "Too many failed attempts. Try again in a few minutes." });
         }

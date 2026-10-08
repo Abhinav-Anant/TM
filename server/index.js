@@ -42,7 +42,22 @@ if (!process.env.JWT_SECRET) {
 const allowedOrigins = (process.env.CORS_ORIGINS || "").split(",").map((o) => o.trim()).filter(Boolean);
 app.use(cors({ origin: allowedOrigins, credentials: true }));
 
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
+
+// Baseline hardening headers (the script hash is the theme-init snippet in client/index.html - update it if that changes). The app is served from this origin only; images may be data:/blob: (avatar and
+// attachment previews). 'unsafe-inline' for styles because the UI uses inline style attributes.
+app.use((req, res, next) => {
+    res.set({
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'Referrer-Policy': 'same-origin',
+        'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'sha256-kJywjTDqqXum47dEfn7hPC29Ac2FYxml8SsXdti4xJE='; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+    });
+    if (req.secure) res.set('Strict-Transport-Security', 'max-age=15552000');
+    next();
+});
+app.disable('x-powered-by');
 
 // API Routes
 app.use('/api/auth', authRoutes);

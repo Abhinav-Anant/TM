@@ -738,6 +738,13 @@ const waitForServer = async () => {
         }
         assert.strictEqual((await call("POST", "/api/auth/login", { body: { email: "throttle@example.test", password: "wrong-pw" } })).status, 429, "11th failed login is throttled");
         assert.strictEqual((await call("POST", "/api/auth/login", { body: { email: "throttle@example.test", password: "pw123456" } })).status, 429, "still throttled while the window is open");
+        // Query-operator injection: an object where a string belongs is refused, never run as a query.
+        assert.strictEqual((await call("POST", "/api/auth/login", { body: { email: { $ne: null }, password: "pw123456" } })).status, 400, "object email refused on login");
+        assert.strictEqual((await call("POST", "/api/auth/login", { body: { email: "member@example.test", password: { $ne: "" } } })).status, 400, "object password refused on login");
+        assert.strictEqual((await call("POST", "/api/auth/register", { body: { name: "X", email: { $ne: null }, password: "pw123456" } })).status, 400, "object email refused on register");
+        const hdr = (await call("GET", "/api/auth/profile")).headers;
+        assert.ok(/frame-ancestors 'none'/.test(hdr.get("content-security-policy")) && hdr.get("x-frame-options") === "DENY", "security headers are set");
+        assert.strictEqual(hdr.get("x-powered-by"), null, "framework banner is hidden");
         pass("Auth guards", "401 unauthenticated, 403 role-gated, JSON 404 on unknown API route");
 
 
