@@ -17,6 +17,8 @@ const userSchema = new mongoose.Schema({
     // WhatsApp gateway expects. Normalised on the way in by utils/phone.js so
     // the send path never has to guess. Null means alerts stay in-app only.
     phone: { type: String, default: null },
+    // Bumped on logout and password change; a token carries the value it was issued under, so older ones stop working.
+    tokenVersion: { type: Number, default: 0 },
     role: { type: String, enum: ["admin", "head", "member"], default: "member" },
     memberships: { type: [membershipSchema], default: [] },
     // Overrides only - see utils/notificationPrefs.js for the defaults and the shape.

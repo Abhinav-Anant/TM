@@ -23,6 +23,11 @@ const protect = async (req, res, next) => {
             return res.status(401).json({ message: "Not authorized, user no longer exists" });
         }
 
+        // Logout and password change bump tokenVersion; tokens from before that no longer count.
+        if ((decoded.tv || 0) !== (user.tokenVersion || 0)) {
+            return res.status(401).json({ message: "Not authorized, session ended" });
+        }
+
         req.user = user;
         next();
     } catch (error) {

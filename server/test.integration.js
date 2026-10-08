@@ -745,6 +745,20 @@ const waitForServer = async () => {
         const hdr = (await call("GET", "/api/auth/profile")).headers;
         assert.ok(/frame-ancestors 'none'/.test(hdr.get("content-security-policy")) && hdr.get("x-frame-options") === "DENY", "security headers are set");
         assert.strictEqual(hdr.get("x-powered-by"), null, "framework banner is hidden");
+        // Revocation: logout and a password change end the sessions issued before them.
+        assert.strictEqual((await call("POST", "/api/users", { token: A, body: { name: "Rev", email: "rev@example.test", password: "pw123456", role: "member" } })).status, 201);
+        const revLogin = async () => (await call("POST", "/api/auth/login", { body: { email: "rev@example.test", password: "pw123456" } })).body.token;
+        const r1 = await revLogin(), r2 = await revLogin();
+        assert.strictEqual((await call("GET", "/api/auth/profile", { token: r1 })).status, 200, "fresh token works");
+        await call("POST", "/api/auth/logout", { token: r1 });
+        assert.strictEqual((await call("GET", "/api/auth/profile", { token: r1 })).status, 401, "token is dead after logout");
+        assert.strictEqual((await call("GET", "/api/auth/profile", { token: r2 })).status, 401, "logout ends the account's other sessions too");
+        const r3 = await revLogin(), r4 = await revLogin();
+        const changed = await call("PUT", "/api/auth/profile", { token: r3, body: { currentPassword: "pw123456", password: "pw654321" } });
+        assert.strictEqual(changed.status, 200);
+        assert.strictEqual((await call("GET", "/api/auth/profile", { token: r4 })).status, 401, "other session ends on password change");
+        assert.strictEqual((await call("GET", "/api/auth/profile", { token: r3 })).status, 401, "old token of the changing session ends too");
+        assert.strictEqual((await call("GET", "/api/auth/profile", { token: changed.body.token })).status, 200, "the reply's fresh token keeps the user signed in");
         pass("Auth guards", "401 unauthenticated, 403 role-gated, JSON 404 on unknown API route");
 
 

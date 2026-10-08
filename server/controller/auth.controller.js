@@ -5,17 +5,17 @@ const User = require("../model/user.model.js");
 const { normalizePhone } = require("../utils/phone.js");
 const { modulesFor } = require("../utils/scope.js");
 const { MIN_PASSWORD_LENGTH } = require("../utils/csv.js");
-const { setAuthCookie, clearAuthCookie } = require("../utils/cookies.js");
+const { AUTH_COOKIE, readCookie, setAuthCookie, clearAuthCookie } = require("../utils/cookies.js");
 
 // Generate JWT Token
-const generateToken = (userId) => {
-    return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: "2d" });
+const generateToken = (user) => {
+    return jwt.sign({ id: user._id, tv: user.tokenVersion || 0 }, process.env.JWT_SECRET, { expiresIn: "2d" });
 };
 
 // The web app lives on the HttpOnly cookie; the same token is returned in the
 // body for mobile, which has no cookie jar.
-const issueToken = (res, userId) => {
-    const token = generateToken(userId);
+const issueToken = (res, user) => {
+    const token = generateToken(user);
     setAuthCookie(res, token);
     return token;
 };
@@ -104,7 +104,7 @@ const registerUser = async (req, res) => {
             modules: await modulesFor(user),
             phone: user.phone,
             profileImageUrl: user.profileImageUrl,
-            token: issueToken(res, user._id),
+            token: issueToken(res, user),
         });
     } catch (error) {
         console.error("Error while registering user:", error.message);
@@ -149,7 +149,7 @@ const loginUser = async (req, res) => {
             modules: await modulesFor(user),
             phone: user.phone,
             profileImageUrl: user.profileImageUrl,
-            token: issueToken(res, user._id)
+            token: issueToken(res, user)
         })
 
 
@@ -214,6 +214,7 @@ const updateUserProfile = async (req, res) => {
             }
             const salt = await bcrypt.genSalt(10);
             user.password = await bcrypt.hash(password, salt);
+            user.tokenVersion = (user.tokenVersion || 0) + 1; // signs out every other session; the reply below issues this one a fresh token
         }
 
         await user.save();
@@ -226,7 +227,7 @@ const updateUserProfile = async (req, res) => {
             modules: await modulesFor(user),
             phone: user.phone,
             profileImageUrl: user.profileImageUrl,
-            token: issueToken(res, user._id)
+            token: issueToken(res, user)
         });
     } catch (error) {
         console.error("Error while updating user profile:", error.message);
@@ -237,7 +238,14 @@ const updateUserProfile = async (req, res) => {
 
 
 // Logout
-const logoutUser = (req, res) => {
+// Also revokes the token (and any other session of this account): a copied token must not outlive logout.
+const logoutUser = async (req, res) => {
+    try {
+        const header = req.headers.authorization;
+        const token = header?.startsWith("Bearer ") ? header.split(" ")[1] : readCookie(req, AUTH_COOKIE);
+        const decoded = token && jwt.verify(token, process.env.JWT_SECRET);
+        if (decoded?.id) await User.updateOne({ _id: decoded.id, tokenVersion: { $in: [decoded.tv || 0, null] } }, { $inc: { tokenVersion: 1 } });
+    } catch { /* no/expired token: nothing to revoke */ }
     clearAuthCookie(res);
     res.json({ message: "Logged out" });
 };
